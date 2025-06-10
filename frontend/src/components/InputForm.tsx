@@ -52,16 +52,15 @@ export const InputForm: React.FC<InputFormProps> = ({
       className={`flex flex-col gap-2 p-3 `}
     >
       <div
-        className={`flex flex-row items-center justify-between text-white rounded-3xl rounded-bl-sm ${
-          hasHistory ? "rounded-br-sm" : ""
-        } break-words min-h-7 bg-neutral-700 px-4 pt-3 `}
+        className={`flex flex-row items-center justify-between text-gray-900 rounded-3xl rounded-bl-sm ${hasHistory ? "rounded-br-sm" : ""
+          } break-words min-h-7 bg-gray-100 border border-gray-200 px-4 pt-3 `}
       >
         <Textarea
           value={internalInputValue}
           onChange={(e) => setInternalInputValue(e.target.value)}
           onKeyDown={handleInternalKeyDown}
           placeholder="Who won the Euro 2024 and scored the most goals?"
-          className={`w-full text-neutral-100 placeholder-neutral-500 resize-none border-0 focus:outline-none focus:ring-0 outline-none focus-visible:ring-0 shadow-none 
+          className={`w-full text-gray-900 placeholder-gray-500 resize-none border-0 focus:outline-none focus:ring-0 outline-none focus-visible:ring-0 shadow-none bg-transparent
                         md:text-base  min-h-[56px] max-h-[200px]`}
           rows={1}
         />
@@ -80,11 +79,10 @@ export const InputForm: React.FC<InputFormProps> = ({
             <Button
               type="submit"
               variant="ghost"
-              className={`${
-                isSubmitDisabled
+              className={`${isSubmitDisabled
                   ? "text-neutral-500"
                   : "text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
-              } p-2 cursor-pointer rounded-full transition-all duration-200 text-base`}
+                } p-2 cursor-pointer rounded-full transition-all duration-200 text-base`}
               disabled={isSubmitDisabled}
             >
               Search

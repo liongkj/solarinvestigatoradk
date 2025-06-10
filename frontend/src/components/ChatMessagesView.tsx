@@ -84,7 +84,7 @@ const mdComponents = {
   code: ({ className, children, ...props }: MdComponentProps) => (
     <code
       className={cn(
-        "bg-neutral-900 rounded px-1 py-0.5 font-mono text-xs",
+        "bg-gray-100 rounded px-1 py-0.5 font-mono text-xs text-gray-800",
         className
       )}
       {...props}
@@ -95,7 +95,7 @@ const mdComponents = {
   pre: ({ className, children, ...props }: MdComponentProps) => (
     <pre
       className={cn(
-        "bg-neutral-900 p-3 rounded-lg overflow-x-auto font-mono text-xs my-3",
+        "bg-gray-100 p-3 rounded-lg overflow-x-auto font-mono text-xs my-3 text-gray-800",
         className
       )}
       {...props}
@@ -260,9 +260,8 @@ export function ChatMessagesView({
             return (
               <div key={message.id || `msg-${index}`} className="space-y-3">
                 <div
-                  className={`flex items-start gap-3 ${
-                    message.type === "human" ? "justify-end" : ""
-                  }`}
+                  className={`flex items-start gap-3 ${message.type === "human" ? "justify-end" : ""
+                    }`}
                 >
                   {message.type === "human" ? (
                     <HumanMessageBubble
@@ -291,7 +290,7 @@ export function ChatMessagesView({
               <div className="flex items-start gap-3 mt-3">
                 {" "}
                 {/* AI message row structure */}
-                <div className="relative group max-w-[85%] md:max-w-[80%] rounded-xl p-3 shadow-sm break-words bg-neutral-800 text-neutral-100 rounded-bl-none w-full min-h-[56px]">
+                <div className="relative group max-w-[85%] md:max-w-[80%] rounded-xl p-3 shadow-sm break-words bg-gray-100 text-gray-900 rounded-bl-none w-full min-h-[56px] border">
                   {liveActivityEvents.length > 0 ? (
                     <div className="text-xs">
                       <ActivityTimeline

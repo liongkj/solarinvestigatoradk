@@ -2,7 +2,8 @@ import { useStream } from "@langchain/langgraph-sdk/react";
 import type { Message } from "@langchain/langgraph-sdk";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ProcessedEvent } from "@/components/ActivityTimeline";
-import { WelcomeScreen } from "@/components/WelcomeScreen";
+import { Dashboard } from "@/components/Dashboard";
+import { InvestigationInterface } from "@/components/InvestigationInterface";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
   const [historicalActivities, setHistoricalActivities] = useState<
     Record<string, ProcessedEvent[]>
   >({});
+  const [currentView, setCurrentView] = useState<'dashboard' | 'investigation' | 'chat'>('dashboard');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasFinalizeEventOccurredRef = useRef(false);
 
@@ -45,9 +47,8 @@ export default function App() {
         const exampleLabels = uniqueLabels.slice(0, 3).join(", ");
         processedEvent = {
           title: "Web Research",
-          data: `Gathered ${numSources} sources. Related to: ${
-            exampleLabels || "N/A"
-          }.`,
+          data: `Gathered ${numSources} sources. Related to: ${exampleLabels || "N/A"
+            }.`,
         };
       } else if (event.reflection) {
         processedEvent = {
@@ -55,8 +56,8 @@ export default function App() {
           data: event.reflection.is_sufficient
             ? "Search successful, generating final answer."
             : `Need more information, searching for ${event.reflection.follow_up_queries.join(
-                ", "
-              )}`,
+              ", "
+            )}`,
         };
       } else if (event.finalize_answer) {
         processedEvent = {
@@ -105,6 +106,7 @@ export default function App() {
   const handleSubmit = useCallback(
     (submittedInputValue: string, effort: string, model: string) => {
       if (!submittedInputValue.trim()) return;
+      setCurrentView('chat'); // Switch to chat view when starting investigation
       setProcessedEventsTimeline([]);
       hasFinalizeEventOccurredRef.current = false;
 
@@ -149,24 +151,39 @@ export default function App() {
 
   const handleCancel = useCallback(() => {
     thread.stop();
-    window.location.reload();
+    setCurrentView('dashboard'); // Return to dashboard on cancel
   }, [thread]);
 
+  const handleStartNewInvestigation = () => {
+    setCurrentView('investigation');
+  };
+
+  const handleBackToDashboard = () => {
+    setCurrentView('dashboard');
+  };
+
   return (
-    <div className="flex h-screen bg-neutral-800 text-neutral-100 font-sans antialiased">
-      <main className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
-        <div
-          className={`flex-1 overflow-y-auto ${
-            thread.messages.length === 0 ? "flex" : ""
-          }`}
-        >
-          {thread.messages.length === 0 ? (
-            <WelcomeScreen
-              handleSubmit={handleSubmit}
-              isLoading={thread.isLoading}
-              onCancel={handleCancel}
-            />
-          ) : (
+    <div className={`flex h-screen font-sans antialiased ${currentView === 'dashboard'
+        ? 'bg-white text-gray-900'
+        : 'bg-neutral-800 text-neutral-100'
+      }`}>
+      {currentView === 'dashboard' && (
+        <Dashboard onStartNewInvestigation={handleStartNewInvestigation} />
+      )}
+
+      {currentView === 'investigation' && (
+        <InvestigationInterface
+          handleSubmit={handleSubmit}
+          isLoading={thread.isLoading}
+          onCancel={handleCancel}
+          onBackToDashboard={handleBackToDashboard}
+          processedEvents={processedEventsTimeline}
+        />
+      )}
+
+      {currentView === 'chat' && (
+        <main className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
+          <div className="flex-1 overflow-y-auto">
             <ChatMessagesView
               messages={thread.messages}
               isLoading={thread.isLoading}
@@ -176,9 +193,9 @@ export default function App() {
               liveActivityEvents={processedEventsTimeline}
               historicalActivities={historicalActivities}
             />
-          )}
-        </div>
-      </main>
+          </div>
+        </main>
+      )}
     </div>
   );
 }
