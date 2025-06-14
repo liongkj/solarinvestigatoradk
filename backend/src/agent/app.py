@@ -1,10 +1,37 @@
 # mypy: disable - error - code = "no-untyped-def,misc"
 import pathlib
+import sys
+import os
+
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
+# Add the src directory to the Python path for proper package imports
+src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+from agent.controllers import api_router
 
 # Define the FastAPI app
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8123",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include API routes with dashboard prefix to avoid conflicts with LangGraph
+app.include_router(api_router)
 
 
 def create_frontend_router(build_dir="../frontend/dist"):

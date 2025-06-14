@@ -12,7 +12,17 @@ dev-frontend:
 
 dev-backend:
 	@echo "Starting backend development server..."
-	@cd backend && langgraph dev
+	cd backend && .venv/bin/langgraph dev
+
+# Alternative method using bash -c for environment activation
+dev-backend-alt:
+	@echo "Starting backend development server with activated environment..."
+	cd backend && bash -c "source .venv/bin/activate && langgraph dev"
+
+# Alternative method using uv (if you're using uv)
+dev-backend-uv:
+	@echo "Starting backend development server with uv..."
+	cd backend && uv run langgraph dev
 
 # Run frontend and backend concurrently
 dev:

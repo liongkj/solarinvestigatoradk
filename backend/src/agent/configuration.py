@@ -9,14 +9,14 @@ class Configuration(BaseModel):
     """The configuration for the agent."""
 
     query_generator_model: str = Field(
-        default="gemini-2.0-flash",
+        default="gemini-2.5-pro-preview-05-06",
         metadata={
             "description": "The name of the language model to use for the agent's query generation."
         },
     )
 
     reflection_model: str = Field(
-        default="gemini-2.5-flash-preview-04-17",
+        default="gemini-2.5-pro-preview-05-06",
         metadata={
             "description": "The name of the language model to use for the agent's reflection."
         },
@@ -26,6 +26,13 @@ class Configuration(BaseModel):
         default="gemini-2.5-pro-preview-05-06",
         metadata={
             "description": "The name of the language model to use for the agent's answer."
+        },
+    )
+
+    reasoning_model: str = Field(
+        default="gemini-2.5-pro-preview-05-06",
+        metadata={
+            "description": "The name of the language model to use for the agent's reasoning."
         },
     )
 
