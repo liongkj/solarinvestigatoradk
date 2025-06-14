@@ -3,7 +3,7 @@ import type { Message } from "@langchain/langgraph-sdk";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ProcessedEvent } from "@/components/ActivityTimeline";
 import { Dashboard } from "@/components/Dashboard";
-import { InvestigationInterface } from "@/components/InvestigationInterface";
+import { InvestigationDialog } from "@/components/InvestigationDialog";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
 
 export default function App() {
@@ -13,7 +13,8 @@ export default function App() {
   const [historicalActivities, setHistoricalActivities] = useState<
     Record<string, ProcessedEvent[]>
   >({});
-  const [currentView, setCurrentView] = useState<'dashboard' | 'investigation' | 'chat'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'chat'>('dashboard');
+  const [isInvestigationDialogOpen, setIsInvestigationDialogOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasFinalizeEventOccurredRef = useRef(false);
 
@@ -107,6 +108,7 @@ export default function App() {
     (submittedInputValue: string, effort: string, model: string) => {
       if (!submittedInputValue.trim()) return;
       setCurrentView('chat'); // Switch to chat view when starting investigation
+      setIsInvestigationDialogOpen(false); // Close dialog when starting investigation
       setProcessedEventsTimeline([]);
       hasFinalizeEventOccurredRef.current = false;
 
@@ -152,33 +154,20 @@ export default function App() {
   const handleCancel = useCallback(() => {
     thread.stop();
     setCurrentView('dashboard'); // Return to dashboard on cancel
+    setIsInvestigationDialogOpen(false); // Close dialog on cancel
   }, [thread]);
 
   const handleStartNewInvestigation = () => {
-    setCurrentView('investigation');
-  };
-
-  const handleBackToDashboard = () => {
-    setCurrentView('dashboard');
+    setIsInvestigationDialogOpen(true);
   };
 
   return (
     <div className={`flex h-screen font-sans antialiased ${currentView === 'dashboard'
-        ? 'bg-white text-gray-900'
-        : 'bg-neutral-800 text-neutral-100'
+      ? 'bg-white text-gray-900'
+      : 'bg-neutral-800 text-neutral-100'
       }`}>
       {currentView === 'dashboard' && (
         <Dashboard onStartNewInvestigation={handleStartNewInvestigation} />
-      )}
-
-      {currentView === 'investigation' && (
-        <InvestigationInterface
-          handleSubmit={handleSubmit}
-          isLoading={thread.isLoading}
-          onCancel={handleCancel}
-          onBackToDashboard={handleBackToDashboard}
-          processedEvents={processedEventsTimeline}
-        />
       )}
 
       {currentView === 'chat' && (
@@ -196,6 +185,15 @@ export default function App() {
           </div>
         </main>
       )}
+
+      <InvestigationDialog
+        isOpen={isInvestigationDialogOpen}
+        onClose={() => setIsInvestigationDialogOpen(false)}
+        handleSubmit={handleSubmit}
+        isLoading={thread.isLoading}
+        onCancel={handleCancel}
+        processedEvents={processedEventsTimeline}
+      />
     </div>
   );
 }

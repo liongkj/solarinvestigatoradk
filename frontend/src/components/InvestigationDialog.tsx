@@ -10,7 +10,13 @@ import {
 } from "./ui/select";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { ActivityTimeline, ProcessedEvent } from "./ActivityTimeline";
-import { ArrowLeft } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from "./ui/dialog";
 
 interface Project {
     id: string;
@@ -21,29 +27,57 @@ interface Project {
     type: 'residential' | 'commercial' | 'industrial';
 }
 
-interface InvestigationInterfaceProps {
+interface InvestigationDialogProps {
+    isOpen: boolean;
+    onClose: () => void;
     handleSubmit: (
         submittedInputValue: string,
         effort: string,
         model: string
     ) => void;
     onCancel: () => void;
-    onBackToDashboard: () => void;
     isLoading: boolean;
     processedEvents?: ProcessedEvent[];
 }
 
-export const InvestigationInterface: React.FC<InvestigationInterfaceProps> = ({
+export const InvestigationDialog: React.FC<InvestigationDialogProps> = ({
+    isOpen,
+    onClose,
     handleSubmit,
     onCancel,
-    onBackToDashboard,
     isLoading,
     processedEvents = [],
 }) => {
     const [selectedProject, setSelectedProject] = useState<string>("");
     const [showCustomQuery, setShowCustomQuery] = useState(false);
 
-
+    // Mock projects - in real app, this would come from your backend
+    const projects: Project[] = [
+        {
+            id: "1",
+            name: "Residential Solar - Smith House",
+            address: "123 Oak Street, Sacramento, CA",
+            customer: "John Smith",
+            status: "planning",
+            type: "residential"
+        },
+        {
+            id: "2",
+            name: "Commercial Solar - TechCorp Building",
+            address: "456 Business Ave, San Francisco, CA",
+            customer: "TechCorp Inc",
+            status: "investigation",
+            type: "commercial"
+        },
+        {
+            id: "3",
+            name: "Community Solar - Greenfield Development",
+            address: "789 Solar Way, Fresno, CA",
+            customer: "Greenfield Community",
+            status: "planning",
+            type: "residential"
+        }
+    ];
 
     const handleStartInvestigation = () => {
         if (!selectedProject) {
@@ -99,33 +133,33 @@ export const InvestigationInterface: React.FC<InvestigationInterfaceProps> = ({
         }
     };
 
+    const handleDialogClose = () => {
+        setSelectedProject("");
+        setShowCustomQuery(false);
+        onClose();
+    };
+
     if (showCustomQuery) {
         return (
-            <div className="min-h-screen bg-white text-gray-900">
-                <div className="w-full px-6 py-8">
-                    <div className="flex items-center justify-center mb-8">
-                        <div className="w-full max-w-6xl">
-                            <Button
-                                variant="ghost"
-                                onClick={() => setShowCustomQuery(false)}
-                                className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                            >
-                                <ArrowLeft className="h-4 w-4 mr-2" />
-                                Back
-                            </Button>
-                        </div>
-                    </div>
+            <Dialog open={isOpen} onOpenChange={handleDialogClose}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white text-gray-900 border-gray-200">
+                    <DialogHeader>
+                        <DialogTitle className="text-gray-900">Custom Investigation</DialogTitle>
+                        <DialogDescription className="text-gray-600">
+                            Enter a custom query for your solar investigation
+                        </DialogDescription>
+                    </DialogHeader>
 
-                    <div className="flex flex-col items-center justify-center text-center w-full max-w-4xl mx-auto gap-6">
-                        <div>
-                            <h1 className="text-3xl md:text-4xl font-semibold text-gray-900 mb-3">
-                                Custom Investigation
-                            </h1>
-                            <p className="text-lg text-gray-600">
-                                Enter a custom query for your solar investigation
-                            </p>
-                        </div>
-                        <div className="w-full mt-4">
+                    <div className="space-y-6">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setShowCustomQuery(false)}
+                            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        >
+                            ← Back to Project Selection
+                        </Button>
+
+                        <div className="w-full">
                             <InputForm
                                 onSubmit={handleSubmit}
                                 isLoading={isLoading}
@@ -134,34 +168,25 @@ export const InvestigationInterface: React.FC<InvestigationInterfaceProps> = ({
                             />
                         </div>
                     </div>
-                </div>
-            </div>
+                </DialogContent>
+            </Dialog>
         );
     }
 
     return (
-        <div className="min-h-screen bg-white text-gray-900">
-            <div className="w-full px-6 py-8">
-                {/* Header with back button */}
-                <div className="flex items-center justify-center mb-8">
-                    <div className="w-full max-w-6xl flex items-center justify-between">
-                        <Button
-                            variant="ghost"
-                            onClick={onBackToDashboard}
-                            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                        >
-                            <ArrowLeft className="h-4 w-4 mr-2" />
-                            Back to Dashboard
-                        </Button>
-                        <h1 className="text-2xl font-bold text-gray-900">New Investigation</h1>
-                        <div></div> {/* Spacer for center alignment */}
-                    </div>
-                </div>
+        <Dialog open={isOpen} onOpenChange={handleDialogClose}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white text-gray-900 border-gray-200">
+                <DialogHeader>
+                    <DialogTitle className="text-gray-900 text-2xl">☀️ Start Investigation</DialogTitle>
+                    <DialogDescription className="text-gray-600">
+                        AI-powered solar project analysis and work order generation
+                    </DialogDescription>
+                </DialogHeader>
 
-                <div className="flex flex-col items-center justify-center text-center w-full max-w-5xl mx-auto gap-8">
+                <div className="space-y-6">
                     {/* Show investigation progress if there are events or if loading after starting investigation */}
                     {(processedEvents.length > 0 || (isLoading && selectedProject)) && (
-                        <div className="w-full max-w-3xl">
+                        <div className="w-full">
                             <ActivityTimeline
                                 processedEvents={processedEvents}
                                 isLoading={isLoading}
@@ -169,16 +194,7 @@ export const InvestigationInterface: React.FC<InvestigationInterfaceProps> = ({
                         </div>
                     )}
 
-                    <div>
-                        <h2 className="text-4xl md:text-5xl font-semibold text-gray-900 mb-4">
-                            ☀️ Start Investigation
-                        </h2>
-                        <p className="text-lg md:text-xl text-gray-600">
-                            AI-powered solar project analysis and work order generation
-                        </p>
-                    </div>
-
-                    <Card className="w-full max-w-3xl bg-white border-gray-200 shadow-lg">
+                    <Card className="w-full bg-white border-gray-200 shadow-lg">
                         <CardHeader>
                             <CardTitle className="text-gray-900">Select Project</CardTitle>
                         </CardHeader>
@@ -261,11 +277,11 @@ export const InvestigationInterface: React.FC<InvestigationInterfaceProps> = ({
                         </CardContent>
                     </Card>
 
-                    <p className="text-xs text-gray-500 max-w-lg">
+                    <p className="text-xs text-gray-500 text-center">
                         Select a project and choose an action. The AI agent will conduct thorough research and provide detailed reports with citations.
                     </p>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 };

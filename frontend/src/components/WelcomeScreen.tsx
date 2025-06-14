@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { InputForm } from "./InputForm";
 import { Button } from "./ui/button";
 import {
@@ -10,19 +10,7 @@ import {
 } from "./ui/select";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { ActivityTimeline, ProcessedEvent } from "./ActivityTimeline";
-
-interface Project {
-  id: string;
-  name: string;
-  address: string;
-  customer: string;
-  status:
-  | "planning"
-  | "investigation"
-  | "approved"
-  | "in-progress"
-  | "completed";
-}
+import { api, Project } from "../lib/api";
 
 interface WelcomeScreenProps {
   handleSubmit: (
@@ -30,44 +18,71 @@ interface WelcomeScreenProps {
     effort: string,
     model: string
   ) => void;
-  onCancel: () => void;
   isLoading: boolean;
   processedEvents?: ProcessedEvent[];
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   handleSubmit,
-  onCancel,
   isLoading,
   processedEvents = [],
 }) => {
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [showCustomQuery, setShowCustomQuery] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
 
-  // Mock projects - in real app, this would come from your backend
-  const projects: Project[] = [
-    {
-      id: "1",
-      name: "Residential Solar - Smith House",
-      address: "123 Oak Street, Sacramento, CA",
-      customer: "John Smith",
-      status: "planning",
-    },
-    {
-      id: "2",
-      name: "Commercial Solar - TechCorp Building",
-      address: "456 Business Ave, San Francisco, CA",
-      customer: "TechCorp Inc",
-      status: "investigation",
-    },
-    {
-      id: "3",
-      name: "Community Solar - Greenfield Development",
-      address: "789 Solar Way, Fresno, CA",
-      customer: "Greenfield Community",
-      status: "planning",
-    },
-  ];
+  // Fetch projects from backend
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setProjectsLoading(true);
+        setProjectsError(null);
+        const fetchedProjects = await api.getProjects();
+        setProjects(fetchedProjects);
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+        setProjectsError(error instanceof Error ? error.message : 'Failed to fetch projects');
+        // Fallback to mock data if API fails
+        setProjects([
+          {
+            id: "1",
+            name: "Residential Solar - Smith House",
+            address: "123 Oak Street, Sacramento, CA",
+            customer: "John Smith",
+            status: "planning",
+            createdAt: new Date().toISOString(),
+            type: "residential",
+          },
+          {
+            id: "2",
+            name: "Commercial Solar - TechCorp Building",
+            address: "456 Business Ave, San Francisco, CA",
+            customer: "TechCorp Inc",
+            status: "investigation",
+            createdAt: new Date().toISOString(),
+            type: "commercial",
+          },
+          {
+            id: "3",
+            name: "Community Solar - Greenfield Development",
+            address: "789 Solar Way, Fresno, CA",
+            customer: "Greenfield Community",
+            status: "planning",
+            createdAt: new Date().toISOString(),
+            type: "commercial",
+          },
+        ]);
+      } finally {
+        setProjectsLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  // Remove the mock projects array - it's now fetched from the API
 
   const handleStartInvestigation = () => {
     if (!selectedProject) {
@@ -144,12 +159,25 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <CardTitle className="text-gray-900">Select Project</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Select value={selectedProject} onValueChange={setSelectedProject}>
+          <Select value={selectedProject} onValueChange={setSelectedProject} disabled={projectsLoading}>
             <SelectTrigger className="w-full bg-gray-50 border-gray-300 text-gray-900 hover:bg-gray-100">
-              <SelectValue placeholder="Choose a solar project..." />
+              <SelectValue
+                placeholder={
+                  projectsLoading
+                    ? "Loading projects..."
+                    : projectsError
+                      ? "Error loading projects"
+                      : "Choose a solar project..."
+                }
+              />
             </SelectTrigger>
             <SelectContent className="bg-white border-gray-200">
-              {projects.map((project) => (
+              {projectsError && (
+                <SelectItem value="error" disabled className="text-red-600">
+                  Error: {projectsError}
+                </SelectItem>
+              )}
+              {!projectsError && projects.map((project) => (
                 <SelectItem
                   key={project.id}
                   value={project.id}
