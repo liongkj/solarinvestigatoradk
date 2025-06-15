@@ -225,3 +225,112 @@
 .border-success {
     border-color: #28a745 !important;
 }
+
+/* Thinking Messages Styles */
+.thinking-message {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.thinking-message::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    border-radius: 8px 0 0 8px;
+}
+
+.thinking-avatar .badge {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.thinking-content {
+    background: transparent;
+}
+
+.thinking-title {
+    color: #495057;
+    font-size: 14px;
+}
+
+.thinking-text {
+    font-size: 13px;
+    color: #6c757d;
+    background-color: rgba(255, 255, 255, 0.7) !important;
+    border-left: 3px solid #dee2e6;
+}
+
+.regular-message {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Show All Thoughts Toggle */
+.form-check-input:checked {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.form-check-label {
+    cursor: pointer;
+}
+
+/* Badge styles for thinking steps */
+.badge-sm {
+    font-size: 10px;
+    padding: 2px 6px;
+}
+
+/* Animation for active thinking */
+@keyframes think-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(108, 117, 125, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 8px rgba(108, 117, 125, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(108, 117, 125, 0);
+    }
+}
+
+.thinking-message.active {
+    animation: think-pulse 2s infinite;
+}
+
+/* Message type specific styling */
+.thinking-message[data-step-type="handoff"] {
+    border-left-color: #007bff;
+}
+
+.thinking-message[data-step-type="decision"] {
+    border-left-color: #28a745;
+}
+
+.thinking-message[data-step-type="tool_call"] {
+    border-left-color: #17a2b8;
+}
+
+.thinking-message[data-step-type="escalation"] {
+    border-left-color: #ffc107;
+}
+
+.thinking-message[data-step-type="completion"] {
+    border-left-color: #28a745;
+}

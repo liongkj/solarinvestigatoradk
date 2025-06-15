@@ -90,7 +90,7 @@
                                 <div class="text-muted small mb-3">
                                     <p class="mb-1">Started: {{ formatDate(investigation.created_at) }}</p>
                                     <p class="mb-1">Plant: {{ investigation.plant_name || 'Plant ID: ' +
-                                        investigation.plant_id?.substring(0, 8) + '...' }}</p>
+                                        investigation.plant_id.substring(0, 8) + '...' }}</p>
                                 </div>
 
                                 <!-- Progress Bar for Running Investigations -->

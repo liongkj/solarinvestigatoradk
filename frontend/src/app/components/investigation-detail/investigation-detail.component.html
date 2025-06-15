@@ -157,45 +157,93 @@
                                 <i class="fas fa-comments me-2"></i>
                                 Agent Communication
                             </h5>
-                            <small class="text-muted">
-                                Auto-refreshing every 3 seconds
-                            </small>
+                            <div class="d-flex align-items-center gap-3">
+                                <!-- Show All Thoughts Toggle -->
+                                <div class="form-check form-switch" *ngIf="getDetailedThoughtsCount() > 0">
+                                    <input class="form-check-input" type="checkbox" id="showAllThoughts"
+                                        [(ngModel)]="showAllThoughts" (change)="toggleThoughts()">
+                                    <label class="form-check-label text-muted" for="showAllThoughts">
+                                        <small>
+                                            <i class="fas fa-brain me-1"></i>
+                                            Show all thoughts ({{ getDetailedThoughtsCount() }} hidden)
+                                        </small>
+                                    </label>
+                                </div>
+                                <small class="text-muted">
+                                    Auto-refreshing every 3 seconds
+                                </small>
+                            </div>
                         </div>
                         <div class="card-body">
                             <div class="chat-container" style="height: 500px; overflow-y: auto;">
-                                <div *ngIf="chatMessages.length === 0" class="text-center py-5 text-muted">
+                                <div *ngIf="getVisibleMessages().length === 0" class="text-center py-5 text-muted">
                                     <i class="fas fa-robot fa-3x mb-3"></i>
                                     <p>No agent messages yet. Agents will start communicating soon...</p>
                                 </div>
 
-                                <div *ngFor="let message of chatMessages" class="chat-message mb-3">
-                                    <div class="d-flex align-items-start">
-                                        <div class="message-avatar me-3">
-                                            <span class="badge rounded-pill"
-                                                [class]="getAgentBadgeClass(message.metadata?.['agent_name'] || 'system')">
-                                                <i class="fas fa-robot"></i>
-                                            </span>
+                                <div *ngFor="let message of getVisibleMessages()" class="chat-message mb-3">
+                                    <!-- Thinking Messages -->
+                                    <div *ngIf="message.message_type === 'thinking'" class="thinking-message">
+                                        <div class="d-flex align-items-start">
+                                            <div class="thinking-avatar me-3">
+                                                <span class="badge rounded-pill"
+                                                    [class]="getThinkingBadgeClass(message.metadata?.['step_type'] || 'reasoning')">
+                                                    <i
+                                                        [class]="getThinkingIcon(message.metadata?.['step_type'] || 'reasoning')"></i>
+                                                </span>
+                                            </div>
+                                            <div class="thinking-content flex-grow-1">
+                                                <div
+                                                    class="thinking-header d-flex justify-content-between align-items-center">
+                                                    <div class="thinking-title fw-bold text-muted">
+                                                        <i class="fas fa-brain me-1"></i>
+                                                        {{ message.metadata?.['title'] || 'Agent Thinking' }}
+                                                        <span class="badge badge-sm ms-2"
+                                                            [class]="message.metadata?.['level'] === 'major' ? 'bg-primary' : 'bg-light text-dark'">
+                                                            {{ message.metadata?.['level'] || 'detailed' }}
+                                                        </span>
+                                                    </div>
+                                                    <div class="thinking-time text-muted">
+                                                        <small>{{ formatTimestamp(message.timestamp) }}</small>
+                                                    </div>
+                                                </div>
+                                                <div class="thinking-text mt-2 p-2 bg-light rounded">
+                                                    <em>{{ message.content }}</em>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="message-content flex-grow-1">
-                                            <div
-                                                class="message-header d-flex justify-content-between align-items-center">
-                                                <div class="message-sender fw-bold">
-                                                    {{ message.metadata?.['agent_name'] || message.message_type |
-                                                    titlecase }}
-                                                </div>
-                                                <div class="message-time text-muted">
-                                                    <small>{{ formatTimestamp(message.timestamp) }}</small>
-                                                </div>
+                                    </div>
+
+                                    <!-- Regular Messages -->
+                                    <div *ngIf="message.message_type !== 'thinking'" class="regular-message">
+                                        <div class="d-flex align-items-start">
+                                            <div class="message-avatar me-3">
+                                                <span class="badge rounded-pill"
+                                                    [class]="getAgentBadgeClass(message.metadata?.['agent_name'] || 'system')">
+                                                    <i class="fas fa-robot"></i>
+                                                </span>
                                             </div>
-                                            <div class="message-text mt-1">
-                                                {{ message.content }}
-                                            </div>
-                                            <div *ngIf="message.metadata && Object.keys(message.metadata).length > 1"
-                                                class="message-metadata mt-2">
-                                                <small class="text-muted">
-                                                    <i class="fas fa-info-circle me-1"></i>
-                                                    Additional data available
-                                                </small>
+                                            <div class="message-content flex-grow-1">
+                                                <div
+                                                    class="message-header d-flex justify-content-between align-items-center">
+                                                    <div class="message-sender fw-bold">
+                                                        {{ message.metadata?.['agent_name'] || message.message_type |
+                                                        titlecase }}
+                                                    </div>
+                                                    <div class="message-time text-muted">
+                                                        <small>{{ formatTimestamp(message.timestamp) }}</small>
+                                                    </div>
+                                                </div>
+                                                <div class="message-text mt-1">
+                                                    {{ message.content }}
+                                                </div>
+                                                <div *ngIf="hasExtraMetadata(message.metadata)"
+                                                    class="message-metadata mt-2">
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-info-circle me-1"></i>
+                                                        Additional data available
+                                                    </small>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -207,4 +255,3 @@
             </div>
         </div>
     </div>
-</div>

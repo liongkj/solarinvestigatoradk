@@ -28,173 +28,38 @@ class SolarInvestigationInput(BaseModel):
     )
 
 
-# --- Tool Functions (Simple Python Functions) ---
-
-
-def analyze_solar_feasibility(
-    address: str, monthly_usage: float, property_type: str = "residential"
-) -> dict:
-    """
-    Analyze solar installation feasibility for a property.
-
-    Args:
-        address (str): Property address
-        monthly_usage (float): Monthly energy usage in kWh
-        property_type (str): Type of property
-
-    Returns:
-        dict: Feasibility analysis results
-    """
-    print(
-        f"-- Tool Call: analyze_solar_feasibility(address='{address}', usage={monthly_usage} kWh) --"
-    )
-
-    # Simple feasibility calculation
-    # Assume 1kW system produces ~130 kWh/month on average
-    required_system_size = monthly_usage / 130
-
-    # Basic cost estimation ($3.50 per watt)
-    estimated_cost = required_system_size * 1000 * 3.50
-    federal_credit = estimated_cost * 0.30  # 30% federal tax credit
-    net_cost = estimated_cost - federal_credit
-
-    # Annual savings estimation
-    annual_usage = monthly_usage * 12
-    annual_savings = annual_usage * 0.12  # Assume $0.12/kWh
-    payback_years = net_cost / annual_savings if annual_savings > 0 else 25
-
-    # Determine feasibility score
-    if payback_years <= 7:
-        feasibility = "Excellent"
-        score = 90
-    elif payback_years <= 10:
-        feasibility = "Good"
-        score = 75
-    elif payback_years <= 15:
-        feasibility = "Fair"
-        score = 60
-    else:
-        feasibility = "Poor"
-        score = 40
-
-    result = {
-        "address": address,
-        "monthly_usage_kwh": monthly_usage,
-        "property_type": property_type,
-        "feasibility_rating": feasibility,
-        "feasibility_score": score,
-        "recommended_system_size_kw": round(required_system_size, 1),
-        "estimated_cost": f"${estimated_cost:,.0f}",
-        "federal_tax_credit": f"${federal_credit:,.0f}",
-        "net_cost_after_incentives": f"${net_cost:,.0f}",
-        "estimated_annual_savings": f"${annual_savings:,.0f}",
-        "payback_period_years": round(payback_years, 1),
-        "assumptions": [
-            "Average solar production: 130 kWh/month per kW installed",
-            "Installation cost: $3.50/watt",
-            "30% Federal Investment Tax Credit",
-            "Electricity rate: $0.12/kWh",
-        ],
-    }
-
-    print(
-        f"-- Tool Result: {feasibility} feasibility, {payback_years:.1f} year payback --"
-    )
-    return result
-
-
-def get_solar_incentives(address: str) -> dict:
-    """
-    Get available solar incentives for a location.
-
-    Args:
-        address (str): Property address
-
-    Returns:
-        dict: Available incentives information
-    """
-    print(f"-- Tool Call: get_solar_incentives(address='{address}') --")
-
-    # Extract state from address (simplified)
-    state_incentives = {
-        "CA": {
-            "state_rebate": "SGIP battery storage rebate available",
-            "net_metering": "NEM 3.0 - reduced export rates",
-            "property_tax": "Property tax exemption for solar installations",
-        },
-        "TX": {
-            "state_rebate": "No state rebate programs",
-            "net_metering": "Varies by utility company",
-            "property_tax": "Property tax exemption available",
-        },
-        "FL": {
-            "state_rebate": "No state rebate programs",
-            "net_metering": "Full retail rate net metering",
-            "property_tax": "Property tax exemption available",
-        },
-        "NY": {
-            "state_rebate": "NY-Sun incentive program",
-            "net_metering": "Full retail rate net metering",
-            "property_tax": "Property tax exemption available",
-        },
-    }
-
-    # Simple state detection (this would be more sophisticated in real implementation)
-    detected_state = "General"
-    for state in state_incentives.keys():
-        if state in address.upper():
-            detected_state = state
-            break
-
-    result = {
-        "address": address,
-        "detected_location": detected_state,
-        "federal_incentives": {
-            "investment_tax_credit": "30% through 2032, then 26% in 2033, 22% in 2034"
-        },
-        "state_incentives": state_incentives.get(
-            detected_state,
-            {
-                "state_rebate": "Check local utility programs",
-                "net_metering": "Check with local utility",
-                "property_tax": "Varies by jurisdiction",
-            },
-        ),
-        "recommendations": [
-            "Consult with local solar installer for specific incentives",
-            "Check utility company net metering policies",
-            "Research local property tax exemptions",
-        ],
-    }
-
-    print(f"-- Tool Result: Incentives found for {detected_state} --")
-    return result
-
-
-# --- Create the Solar Investigation Agent ---
-
-
 def create_solar_investigation_agent() -> LlmAgent:
     """Create a solar investigation agent following ADK best practices."""
 
     return LlmAgent(
-        model="gemini-2.0-flash",
+        model="gemini-2.0-flash",  # Using ADK-compatible Gemini model
         name="solar_investigation_agent",
-        description="Analyzes solar installation feasibility and provides recommendations",
-        instruction="""You are a Solar Investigation Expert that helps people evaluate solar installation opportunities.
+        description="Analyzes solar installation feasibility and provides comprehensive recommendations",
+        instruction="""You are a Solar Investigation Expert AI assistant that helps evaluate solar installation opportunities.
 
-When a user provides property details in JSON format, use your tools to:
-1. First, use 'analyze_solar_feasibility' to assess the property's solar potential
-2. Then, use 'get_solar_incentives' to find available rebates and programs
-3. Provide a clear, comprehensive summary with actionable recommendations
+When a user provides property details (typically in JSON format), analyze the information and provide a comprehensive solar feasibility assessment.
 
-Always be realistic about solar potential and clearly explain your assumptions.
-Focus on practical advice that helps users make informed decisions.
+Your analysis should include:
+1. Property suitability assessment based on location and usage patterns
+2. Estimated solar system size and energy production potential  
+3. Financial analysis including payback period and savings estimates
+4. Available incentives and rebate programs
+5. Clear recommendations and next steps
 
-Present your findings in a friendly, professional manner with clear next steps.""",
-        tools=[analyze_solar_feasibility, get_solar_incentives],
+Always:
+- Be realistic and honest about solar potential
+- Explain your assumptions and reasoning clearly
+- Provide practical, actionable advice
+- Use a friendly but professional tone
+- Structure your response clearly with headings and bullet points
+- Include specific numbers and estimates when possible
+
+If information is missing or unclear, ask clarifying questions or make reasonable assumptions and state them explicitly.
+
+Focus on helping users make informed decisions about solar energy investments.""",
+        tools=[],  # Tools will be added when available
         input_schema=SolarInvestigationInput,
-        output_key="solar_investigation_result",
+        output_key="solar_investigation_result",  # Save result to session state
     )
 
 
@@ -263,7 +128,7 @@ async def investigate_solar_project(
     ):
         if event.is_final_response() and event.content and event.content.parts:
             final_response = event.content.parts[0].text
-
+    print("Final Response:", final_response)
     return final_response
 
 

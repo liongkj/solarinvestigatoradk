@@ -15,6 +15,7 @@ export enum AgentMessageType {
     USER = 'user',
     AGENT = 'agent',
     SYSTEM = 'system',
+    THINKING = 'thinking',
     TOOL_CALL = 'tool_call',
     TOOL_RESULT = 'tool_result'
 }

@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { interval, Subscription, Subject } from 'rxjs';
 import { takeUntil, switchMap, catchError, finalize } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -16,7 +17,7 @@ interface ProgressStep {
 @Component({
     selector: 'app-investigation-detail',
     standalone: true,
-    imports: [CommonModule],
+    imports: [CommonModule, FormsModule],
     templateUrl: './investigation-detail.component.html',
     styleUrls: ['./investigation-detail.component.css']
 })
@@ -26,6 +27,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     isLoading = false;
     error: string | null = null;
     chatMessages: AgentMessage[] = [];
+    showAllThoughts = false; // Toggle for detailed thinking messages
 
     // Auto-refresh subscription
     private refreshSubscription: Subscription | null = null;
@@ -254,4 +256,77 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             msg.message_type === AgentMessageType.AGENT || msg.message_type === AgentMessageType.TOOL_RESULT
         );
     }
+
+    // Helper methods for thinking messages
+    getVisibleMessages(): AgentMessage[] {
+        if (this.showAllThoughts) {
+            return this.chatMessages;
+        }
+
+        // Filter to show only major thinking messages and non-thinking messages
+        return this.chatMessages.filter(msg => {
+            if (msg.message_type !== AgentMessageType.THINKING) {
+                return true; // Show all non-thinking messages
+            }
+
+            // For thinking messages, only show "major" level ones
+            return msg.metadata?.['level'] === 'major';
+        });
+    }
+
+    getThinkingBadgeClass(stepType: string): string {
+        switch (stepType) {
+            case 'handoff':
+                return 'bg-primary';
+            case 'decision':
+                return 'bg-success';
+            case 'tool_call':
+                return 'bg-info';
+            case 'escalation':
+                return 'bg-warning';
+            case 'completion':
+                return 'bg-success';
+            default:
+                return 'bg-secondary';
+        }
+    }
+
+    getThinkingIcon(stepType: string): string {
+        switch (stepType) {
+            case 'handoff':
+                return 'fas fa-exchange-alt';
+            case 'decision':
+                return 'fas fa-lightbulb';
+            case 'tool_call':
+                return 'fas fa-cog';
+            case 'escalation':
+                return 'fas fa-exclamation-triangle';
+            case 'completion':
+                return 'fas fa-check-circle';
+            case 'agent_processing':
+                return 'fas fa-brain';
+            case 'streaming':
+                return 'fas fa-comments';
+            default:
+                return 'fas fa-comment-dots';
+        }
+    }
+
+    toggleThoughts(): void {
+        this.showAllThoughts = !this.showAllThoughts;
+    }
+
+    getDetailedThoughtsCount(): number {
+        return this.chatMessages.filter(msg =>
+            msg.message_type === AgentMessageType.THINKING &&
+            msg.metadata?.['level'] === 'detailed'
+        ).length;
+    }
+
+    hasExtraMetadata(metadata: any): boolean {
+        return metadata && Object.keys(metadata).length > 1;
+    }
+
+    // Make Object available in template
+    Object = Object;
 }

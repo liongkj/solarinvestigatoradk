@@ -14,7 +14,7 @@ from adk.models.investigation import (
     DecisionRequest,
     DecisionResponse,
 )
-from adk.services.investigation_service import InvestigationService
+from adk.services.investigation_service_clean import InvestigationService
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +263,95 @@ async def send_message_to_investigation(
     except Exception as e:
         logger.error(f"Error sending message to investigation {investigation_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
+
+
+@router.post("/{investigation_id}/simulate-thinking")
+async def simulate_agent_thinking(
+    investigation_id: str,
+    investigation_service: InvestigationService = Depends(InvestigationService),
+):
+    """
+    Simulate agent thinking process for testing the UI.
+    This endpoint adds sample thinking messages to demonstrate the system of thought.
+    """
+    try:
+        # Check if investigation exists
+        investigation = await investigation_service.get_investigation(investigation_id)
+        if not investigation:
+            raise HTTPException(
+                status_code=404, detail=f"Investigation {investigation_id} not found"
+            )
+
+        # Add simulated thinking messages
+        await investigation_service.add_thinking_message(
+            investigation_id,
+            "🤔 Analyzing user request",
+            "Starting comprehensive analysis of solar production anomalies",
+            "major",
+            "reasoning",
+        )
+
+        await investigation_service.add_thinking_message(
+            investigation_id,
+            "📊 Loading historical data",
+            "Retrieving production data from June 10-14, 2025 for Plant-002",
+            "detailed",
+            "tool_call",
+        )
+
+        await investigation_service.add_thinking_message(
+            investigation_id,
+            "⚠️ Anomaly detected",
+            "Production dropped 15% on June 12th. Need to investigate root cause.",
+            "major",
+            "decision",
+        )
+
+        await investigation_service.add_thinking_message(
+            investigation_id,
+            "🌤️ Checking weather correlation",
+            "Calling weather API to determine if weather caused the production drop",
+            "detailed",
+            "tool_call",
+        )
+
+        await investigation_service.add_thinking_message(
+            investigation_id,
+            "🔄 Transferring to Alert Agent",
+            "Weather was clear. Handing off to Alert Agent for equipment failure analysis",
+            "major",
+            "handoff",
+        )
+
+        await investigation_service.add_thinking_message(
+            investigation_id,
+            "🔧 Equipment diagnostic initiated",
+            "Alert Agent is running diagnostic checks on inverters and panels",
+            "detailed",
+            "agent_processing",
+        )
+
+        await investigation_service.add_thinking_message(
+            investigation_id,
+            "✅ Analysis complete",
+            "All agents have completed their analysis. Generating final report.",
+            "major",
+            "completion",
+        )
+
+        return {
+            "investigation_id": investigation_id,
+            "message": "Simulated thinking process added successfully",
+            "thinking_messages_added": 7,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error simulating thinking for {investigation_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to simulate thinking: {str(e)}"
+        )
 
 
 # Health check endpoint specifically for investigation service
