@@ -14,8 +14,7 @@
                 <button (click)="refresh()" class="btn btn-outline-secondary me-3" title="Refresh">
                     🔄 Refresh
                 </button>
-                <button (click)="startNewInvestigation()" [disabled]="isLoading" class="btn btn-primary">
-                    <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
+                <button (click)="openNewInvestigationModal(newInvestigationModal)" class="btn btn-primary">
                     + New Investigation
                 </button>
             </div>
@@ -69,7 +68,7 @@
                     <div style="font-size: 4rem;" class="text-muted mb-3">🔍</div>
                     <h3 class="h4 text-dark mb-3">No investigations found</h3>
                     <p class="text-muted mb-4">Start a new investigation to see results here.</p>
-                    <button (click)="startNewInvestigation()" class="btn btn-primary btn-lg">
+                    <button (click)="openNewInvestigationModal(newInvestigationModal)" class="btn btn-primary btn-lg">
                         Start Investigation
                     </button>
                 </div>
@@ -80,22 +79,23 @@
                         <div (click)="selectInvestigation(investigation)" class="card h-100 investigation-card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
-                                    <h5 class="card-title">{{ investigation.title }}</h5>
-                                    <span [class]="'badge ' + getStatusColor(investigation.status)"
-                                        class="status-{{ investigation.status }}">
+                                    <h5 class="card-title">{{ getInvestigationTitle(investigation) }}</h5>
+                                    <span [class]="'badge ' + getStatusColor(investigation.status)">
                                         {{ investigation.status | titlecase }}
                                     </span>
                                 </div>
 
                                 <div class="text-muted small mb-3">
-                                    <p class="mb-1">Started: {{ formatDate(investigation.createdAt) }}</p>
-                                    <p class="mb-0" *ngIf="investigation.agentChat.length > 0">
-                                        Messages: {{ investigation.agentChat.length }}
+                                    <p class="mb-1">Started: {{ formatDate(investigation.created_at) }}</p>
+                                    <p class="mb-1">Usage: {{ investigation.monthly_usage }} kWh/month</p>
+                                    <p class="mb-0"
+                                        *ngIf="chatMessages.length > 0 && selectedInvestigation?.id === investigation.id">
+                                        Messages: {{ chatMessages.length }}
                                     </p>
                                 </div>
 
                                 <!-- Progress Bar for Running Investigations -->
-                                <div *ngIf="investigation.status === 'running'" class="mb-3">
+                                <div *ngIf="isInvestigationActive(investigation)" class="mb-3">
                                     <div class="d-flex justify-content-between small text-muted mb-1">
                                         <span>In Progress</span>
                                         <span>Processing...</span>
@@ -119,65 +119,89 @@
             <div *ngIf="selectedInvestigation" class="card">
                 <!-- Header -->
                 <div class="card-header bg-light">
-                    <button (click)="selectedInvestigation = null" class="btn btn-link text-primary p-0 mb-2">
+                    <button (click)="selectedInvestigation = null; stopChatRefresh()"
+                        class="btn btn-link text-primary p-0 mb-2">
                         ← Back to Investigations
                     </button>
-                    <h2 class="h4 mb-2">{{ selectedInvestigation.title }}</h2>
+                    <h2 class="h4 mb-2">{{ getInvestigationTitle(selectedInvestigation) }}</h2>
                     <div class="d-flex align-items-center">
-                        <span [class]="'badge me-3 ' + getStatusColor(selectedInvestigation.status)"
-                            class="status-{{ selectedInvestigation.status }}">
+                        <span [class]="'badge me-3 ' + getStatusColor(selectedInvestigation.status)">
                             {{ selectedInvestigation.status | titlecase }}
                         </span>
                         <small class="text-muted">
-                            {{ formatDate(selectedInvestigation.createdAt) }}
+                            {{ formatDate(selectedInvestigation.created_at) }}
                         </small>
+                    </div>
+                    <div class="mt-2 text-muted small">
+                        <div>Monthly Usage: {{ selectedInvestigation.monthly_usage }} kWh</div>
+                        <div>Property Type: {{ selectedInvestigation.property_type | titlecase }}</div>
+                        <div *ngIf="selectedInvestigation.budget_range">Budget: {{ selectedInvestigation.budget_range }}
+                        </div>
                     </div>
                 </div>
 
                 <!-- Agent Chat -->
                 <div class="card-body">
-                    <h5 class="mb-3">AI Agent Communications</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">AI Agent Communications</h5>
+                        <small class="text-muted" *ngIf="chatMessages.length > 0">
+                            {{ chatMessages.length }} messages
+                        </small>
+                    </div>
 
                     <!-- Chat Messages -->
-                    <div class="border rounded p-3 bg-light chat-container">
-                        <div *ngIf="selectedInvestigation.agentChat.length === 0" class="text-center py-4">
+                    <div class="border rounded p-3 bg-light chat-container"
+                        style="max-height: 400px; overflow-y: auto;">
+                        <div *ngIf="chatMessages.length === 0" class="text-center py-4">
                             <div style="font-size: 3rem;" class="mb-2">🤖</div>
                             <p class="text-muted">AI agents will appear here when the investigation starts...</p>
                         </div>
 
-                        <div *ngFor="let message of selectedInvestigation.agentChat" class="d-flex mb-3">
+                        <div *ngFor="let message of chatMessages" class="d-flex mb-3">
                             <div class="flex-shrink-0 me-3">
                                 <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
                                     style="width: 2rem; height: 2rem;">
                                     <small class="fw-bold">
-                                        {{ message.agentName.charAt(0).toUpperCase() }}
+                                        {{ getMessageAuthor(message).charAt(0).toUpperCase() }}
                                     </small>
                                 </div>
                             </div>
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center mb-1">
-                                    <strong class="small">{{ message.agentName }}</strong>
+                                    <strong class="small">{{ getMessageAuthor(message) }}</strong>
                                     <small class="text-muted ms-2">{{ formatDate(message.timestamp) }}</small>
                                 </div>
-                                <p class="small mb-0">{{ message.message }}</p>
+                                <p class="small mb-0">{{ message.content }}</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- Findings Section -->
-                    <div *ngIf="selectedInvestigation.findings" class="mt-4">
-                        <h6>Investigation Findings</h6>
+                    <div *ngIf="selectedInvestigation.result" class="mt-4">
+                        <h6>Investigation Results</h6>
                         <div class="alert alert-success">
-                            {{ selectedInvestigation.findings }}
+                            <pre>{{ selectedInvestigation.result | json }}</pre>
+                        </div>
+                    </div>
+
+                    <!-- Error Message -->
+                    <div *ngIf="selectedInvestigation.error_message" class="mt-4">
+                        <h6>Error</h6>
+                        <div class="alert alert-danger">
+                            {{ selectedInvestigation.error_message }}
                         </div>
                     </div>
 
                     <!-- Action Buttons for Completed Investigations -->
-                    <div *ngIf="selectedInvestigation.status === 'complete'" class="mt-4 d-flex gap-2">
-                        <button class="btn btn-primary">
+                    <div *ngIf="selectedInvestigation.status === 'completed'" class="mt-4 d-flex gap-2">
+                        <button (click)="makeDecision('create_report', 'report')" class="btn btn-primary"
+                            [disabled]="isLoading">
+                            <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
                             Create Report
                         </button>
-                        <button class="btn btn-success">
+                        <button (click)="makeDecision('create_work_order', 'work_order')" class="btn btn-success"
+                            [disabled]="isLoading">
+                            <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
                             Create Work Order
                         </button>
                     </div>
@@ -204,3 +228,74 @@
         </div>
     </div>
 </div>
+
+<!-- New Investigation Modal -->
+<ng-template #newInvestigationModal let-modal>
+    <div class="modal-header">
+        <h1 class="modal-title fs-5">Start New Solar Investigation</h1>
+        <button type="button" class="btn-close" (click)="modal.dismiss()"></button>
+    </div>
+    <div class="modal-body">
+        <form #investigationForm="ngForm">
+            <div class="mb-3">
+                <label for="address" class="form-label">Property Address *</label>
+                <input type="text" class="form-control" id="address" name="address"
+                    [(ngModel)]="newInvestigationForm.address" required
+                    placeholder="Enter the property address for solar analysis">
+                <div class="form-text">Full address helps with accurate solar potential calculation</div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="monthly_usage" class="form-label">Monthly Usage (kWh) *</label>
+                        <input type="number" class="form-control" id="monthly_usage" name="monthly_usage"
+                            [(ngModel)]="newInvestigationForm.monthly_usage" required min="0" step="0.1"
+                            placeholder="e.g., 850">
+                        <div class="form-text">Average monthly electricity usage in kilowatt-hours</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="property_type" class="form-label">Property Type</label>
+                        <select class="form-select" id="property_type" name="property_type"
+                            [(ngModel)]="newInvestigationForm.property_type">
+                            <option value="residential">Residential</option>
+                            <option value="commercial">Commercial</option>
+                            <option value="industrial">Industrial</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="budget_range" class="form-label">Budget Range (Optional)</label>
+                <select class="form-select" id="budget_range" name="budget_range"
+                    [(ngModel)]="newInvestigationForm.budget_range">
+                    <option value="">Select budget range...</option>
+                    <option value="under_10k">Under $10,000</option>
+                    <option value="10k_25k">$10,000 - $25,000</option>
+                    <option value="25k_50k">$25,000 - $50,000</option>
+                    <option value="50k_100k">$50,000 - $100,000</option>
+                    <option value="over_100k">Over $100,000</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="additional_notes" class="form-label">Additional Notes (Optional)</label>
+                <textarea class="form-control" id="additional_notes" name="additional_notes"
+                    [(ngModel)]="newInvestigationForm.additional_notes" rows="3"
+                    placeholder="Any specific requirements, constraints, or goals for this solar investigation..."></textarea>
+            </div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="modal.dismiss()">Cancel</button>
+        <button type="button" class="btn btn-primary"
+            [disabled]="isLoading || !newInvestigationForm.address || !newInvestigationForm.monthly_usage"
+            (click)="startNewInvestigation(); modal.close();">
+            <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
+            Start Investigation
+        </button>
+    </div>
+</ng-template>

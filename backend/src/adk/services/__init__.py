@@ -1,3 +1,5 @@
 """ADK Services module"""
 
-__all__ = []
+from .investigation_service import investigation_service, InvestigationService
+
+__all__ = ["investigation_service", "InvestigationService"]

@@ -11,7 +11,7 @@ import logging
 
 from google.adk.cli.fast_api import get_fast_api_app
 from adk.config import settings
-from adk.controllers import investigation_router
+from adk.controllers import investigation_management_router
 
 
 # Configure logging
@@ -51,8 +51,8 @@ app.add_middleware(
     allow_headers=settings.cors_allow_headers,
 )
 
-# Include our custom investigation router
-app.include_router(investigation_router)
+# Include our custom investigation routers
+app.include_router(investigation_management_router)
 
 
 # Add our custom endpoints
