@@ -30,13 +30,13 @@ class InvestigationService:
     def __init__(self):
         # Get application settings
         settings = get_settings()
-        
+
         # Use persistent database storage for sessions
         self.session_service = DatabaseSessionService(db_url=settings.database_url)
-        
+
         # Simple file-based persistence for investigations (quick fix)
         self.investigations_file = "investigations_data.json"
-        
+
         # In-memory cache loaded from file
         self.investigations: Dict[str, Investigation] = {}
         self.chat_histories: Dict[str, List[AgentMessage]] = {}
@@ -46,26 +46,41 @@ class InvestigationService:
         # Load existing investigations from file
         self._load_investigations_from_file()
 
-        logger.info(f"Initialized InvestigationService with database: {settings.database_url}")
-        logger.info(f"Loaded {len(self.investigations)} investigations from file storage")
+        logger.info(
+            f"Initialized InvestigationService with database: {settings.database_url}"
+        )
+        logger.info(
+            f"Loaded {len(self.investigations)} investigations from file storage"
+        )
 
     def _load_investigations_from_file(self):
         """Load investigations from JSON file"""
         try:
             import os
+
             if os.path.exists(self.investigations_file):
-                with open(self.investigations_file, 'r') as f:
+                with open(self.investigations_file, "r") as f:
                     data = json.load(f)
                     for inv_id, inv_data in data.items():
                         # Convert ISO strings back to datetime/date objects
-                        inv_data['created_at'] = datetime.fromisoformat(inv_data['created_at'])
-                        inv_data['updated_at'] = datetime.fromisoformat(inv_data['updated_at'])
-                        if inv_data['completed_at']:
-                            inv_data['completed_at'] = datetime.fromisoformat(inv_data['completed_at'])
-                        inv_data['start_date'] = datetime.fromisoformat(inv_data['start_date']).date()
-                        inv_data['end_date'] = datetime.fromisoformat(inv_data['end_date']).date()
-                        inv_data['status'] = InvestigationStatus(inv_data['status'])
-                        
+                        inv_data["created_at"] = datetime.fromisoformat(
+                            inv_data["created_at"]
+                        )
+                        inv_data["updated_at"] = datetime.fromisoformat(
+                            inv_data["updated_at"]
+                        )
+                        if inv_data["completed_at"]:
+                            inv_data["completed_at"] = datetime.fromisoformat(
+                                inv_data["completed_at"]
+                            )
+                        inv_data["start_date"] = datetime.fromisoformat(
+                            inv_data["start_date"]
+                        ).date()
+                        inv_data["end_date"] = datetime.fromisoformat(
+                            inv_data["end_date"]
+                        ).date()
+                        inv_data["status"] = InvestigationStatus(inv_data["status"])
+
                         investigation = Investigation(**inv_data)
                         self.investigations[inv_id] = investigation
         except Exception as e:
@@ -78,18 +93,18 @@ class InvestigationService:
             for inv_id, investigation in self.investigations.items():
                 inv_dict = investigation.model_dump()
                 # Convert datetime objects to ISO strings for JSON serialization
-                inv_dict['created_at'] = investigation.created_at.isoformat()
-                inv_dict['updated_at'] = investigation.updated_at.isoformat()
+                inv_dict["created_at"] = investigation.created_at.isoformat()
+                inv_dict["updated_at"] = investigation.updated_at.isoformat()
                 if investigation.completed_at:
-                    inv_dict['completed_at'] = investigation.completed_at.isoformat()
+                    inv_dict["completed_at"] = investigation.completed_at.isoformat()
                 else:
-                    inv_dict['completed_at'] = None
-                inv_dict['start_date'] = investigation.start_date.isoformat()
-                inv_dict['end_date'] = investigation.end_date.isoformat()
-                inv_dict['status'] = investigation.status.value
+                    inv_dict["completed_at"] = None
+                inv_dict["start_date"] = investigation.start_date.isoformat()
+                inv_dict["end_date"] = investigation.end_date.isoformat()
+                inv_dict["status"] = investigation.status.value
                 data[inv_id] = inv_dict
-            
-            with open(self.investigations_file, 'w') as f:
+
+            with open(self.investigations_file, "w") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving investigations to file: {e}")
