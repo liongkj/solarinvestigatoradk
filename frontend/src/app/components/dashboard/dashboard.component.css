@@ -1,0 +1,88 @@
+/* Dashboard Component Styles - Bootstrap Compatible */
+
+/* Custom card hover effects */
+.investigation-card:hover {
+    transform: translateY(-2px);
+    transition: all 0.2s ease-in-out;
+}
+
+/* Custom status colors */
+.status-running {
+    background-color: #e3f2fd !important;
+    color: #1976d2 !important;
+}
+
+.status-complete {
+    background-color: #e8f5e8 !important;
+    color: #2e7d32 !important;
+}
+
+.status-failed {
+    background-color: #ffebee !important;
+    color: #d32f2f !important;
+}
+
+/* Chat container styling */
+.chat-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.chat-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.chat-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.chat-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Custom progress bar for running investigations */
+.progress-bar-animated {
+    background-image: linear-gradient(45deg, rgba(255, 255, 255, .15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, .15) 50%, rgba(255, 255, 255, .15) 75%, transparent 75%, transparent);
+    background-size: 1rem 1rem;
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+/* Custom button styles */
+.btn-link {
+    text-decoration: none;
+}
+
+.btn-link:hover {
+    text-decoration: underline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .navbar .container-fluid {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .navbar .d-flex {
+        margin-top: 0.5rem;
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+/* Animation for loading spinner */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}

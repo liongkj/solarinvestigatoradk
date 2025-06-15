@@ -68,7 +68,7 @@ class AgentMessage:
 
 ## Technical Implementation (Hackathon)
 
-### Frontend (React)
+### Frontend (Angular)
 **Single Page Changes:**
 - Replace "Investigations" tab content
 - Add WebSocket for real-time agent chat

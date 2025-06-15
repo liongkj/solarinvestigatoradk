@@ -1,0 +1,206 @@
+<div class="min-vh-100">
+    <!-- Header -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm border-bottom">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center">
+                <h1 class="navbar-brand h3 mb-0 fw-semibold text-dark">
+                    🌞 Solar Investigator Dashboard
+                </h1>
+                <small class="text-muted ms-3">
+                    AI-powered solar project management and analysis
+                </small>
+            </div>
+            <div class="d-flex align-items-center">
+                <button (click)="refresh()" class="btn btn-outline-secondary me-3" title="Refresh">
+                    🔄 Refresh
+                </button>
+                <button (click)="startNewInvestigation()" [disabled]="isLoading" class="btn btn-primary">
+                    <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
+                    + New Investigation
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Error Alert -->
+    <div *ngIf="error" class="container-fluid mt-3">
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>API Error (0):</strong> {{ error }}
+            <button type="button" class="btn-close" (click)="error = null"></button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container-fluid py-4">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs mb-4">
+            <li class="nav-item">
+                <button (click)="setActiveTab('investigations')" [class.active]="activeTab === 'investigations'"
+                    class="nav-link">
+                    🔍 Investigations
+                </button>
+            </li>
+            <li class="nav-item">
+                <button (click)="setActiveTab('workorders')" [class.active]="activeTab === 'workorders'"
+                    class="nav-link">
+                    📋 Work Orders
+                </button>
+            </li>
+            <li class="nav-item">
+                <button (click)="setActiveTab('projects')" [class.active]="activeTab === 'projects'" class="nav-link">
+                    🏗️ Projects
+                </button>
+            </li>
+        </ul>
+
+        <!-- Loading State -->
+        <div *ngIf="isLoading" class="text-center py-5">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+            <p class="mt-3 text-muted">Loading dashboard data...</p>
+        </div>
+
+        <!-- Investigations Tab -->
+        <div *ngIf="activeTab === 'investigations' && !isLoading">
+            <!-- Investigation List -->
+            <div *ngIf="!selectedInvestigation">
+                <!-- Empty State -->
+                <div *ngIf="investigations.length === 0" class="text-center py-5">
+                    <div style="font-size: 4rem;" class="text-muted mb-3">🔍</div>
+                    <h3 class="h4 text-dark mb-3">No investigations found</h3>
+                    <p class="text-muted mb-4">Start a new investigation to see results here.</p>
+                    <button (click)="startNewInvestigation()" class="btn btn-primary btn-lg">
+                        Start Investigation
+                    </button>
+                </div>
+
+                <!-- Investigation Cards -->
+                <div *ngIf="investigations.length > 0" class="row g-4">
+                    <div *ngFor="let investigation of investigations" class="col-md-6 col-lg-4">
+                        <div (click)="selectInvestigation(investigation)" class="card h-100 investigation-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h5 class="card-title">{{ investigation.title }}</h5>
+                                    <span [class]="'badge ' + getStatusColor(investigation.status)"
+                                        class="status-{{ investigation.status }}">
+                                        {{ investigation.status | titlecase }}
+                                    </span>
+                                </div>
+
+                                <div class="text-muted small mb-3">
+                                    <p class="mb-1">Started: {{ formatDate(investigation.createdAt) }}</p>
+                                    <p class="mb-0" *ngIf="investigation.agentChat.length > 0">
+                                        Messages: {{ investigation.agentChat.length }}
+                                    </p>
+                                </div>
+
+                                <!-- Progress Bar for Running Investigations -->
+                                <div *ngIf="investigation.status === 'running'" class="mb-3">
+                                    <div class="d-flex justify-content-between small text-muted mb-1">
+                                        <span>In Progress</span>
+                                        <span>Processing...</span>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                            style="width: 45%"></div>
+                                    </div>
+                                </div>
+
+                                <small class="text-muted">
+                                    Click to view chat and details
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Investigation Detail View -->
+            <div *ngIf="selectedInvestigation" class="card">
+                <!-- Header -->
+                <div class="card-header bg-light">
+                    <button (click)="selectedInvestigation = null" class="btn btn-link text-primary p-0 mb-2">
+                        ← Back to Investigations
+                    </button>
+                    <h2 class="h4 mb-2">{{ selectedInvestigation.title }}</h2>
+                    <div class="d-flex align-items-center">
+                        <span [class]="'badge me-3 ' + getStatusColor(selectedInvestigation.status)"
+                            class="status-{{ selectedInvestigation.status }}">
+                            {{ selectedInvestigation.status | titlecase }}
+                        </span>
+                        <small class="text-muted">
+                            {{ formatDate(selectedInvestigation.createdAt) }}
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Agent Chat -->
+                <div class="card-body">
+                    <h5 class="mb-3">AI Agent Communications</h5>
+
+                    <!-- Chat Messages -->
+                    <div class="border rounded p-3 bg-light chat-container">
+                        <div *ngIf="selectedInvestigation.agentChat.length === 0" class="text-center py-4">
+                            <div style="font-size: 3rem;" class="mb-2">🤖</div>
+                            <p class="text-muted">AI agents will appear here when the investigation starts...</p>
+                        </div>
+
+                        <div *ngFor="let message of selectedInvestigation.agentChat" class="d-flex mb-3">
+                            <div class="flex-shrink-0 me-3">
+                                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
+                                    style="width: 2rem; height: 2rem;">
+                                    <small class="fw-bold">
+                                        {{ message.agentName.charAt(0).toUpperCase() }}
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-1">
+                                    <strong class="small">{{ message.agentName }}</strong>
+                                    <small class="text-muted ms-2">{{ formatDate(message.timestamp) }}</small>
+                                </div>
+                                <p class="small mb-0">{{ message.message }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Findings Section -->
+                    <div *ngIf="selectedInvestigation.findings" class="mt-4">
+                        <h6>Investigation Findings</h6>
+                        <div class="alert alert-success">
+                            {{ selectedInvestigation.findings }}
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons for Completed Investigations -->
+                    <div *ngIf="selectedInvestigation.status === 'complete'" class="mt-4 d-flex gap-2">
+                        <button class="btn btn-primary">
+                            Create Report
+                        </button>
+                        <button class="btn btn-success">
+                            Create Work Order
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Work Orders Tab -->
+        <div *ngIf="activeTab === 'workorders' && !isLoading">
+            <div *ngIf="workOrders.length === 0" class="text-center py-5">
+                <div style="font-size: 4rem;" class="text-muted mb-3">📋</div>
+                <h3 class="h4 text-dark mb-3">No work orders found</h3>
+                <p class="text-muted">Work orders will appear here when created from investigations.</p>
+            </div>
+        </div>
+
+        <!-- Projects Tab -->
+        <div *ngIf="activeTab === 'projects' && !isLoading">
+            <div *ngIf="projects.length === 0" class="text-center py-5">
+                <div style="font-size: 4rem;" class="text-muted mb-3">🏗️</div>
+                <h3 class="h4 text-dark mb-3">No projects found</h3>
+                <p class="text-muted">Solar farm projects will appear here once configured.</p>
+            </div>
+        </div>
+    </div>
+</div>

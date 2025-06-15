@@ -13,9 +13,15 @@ uv add google-adk-python
 6. Use `fastapi run` to serve your FastAPI 
 7. Always write functions from top to bottom lazilly, which means if you have a function that calls another function, write the calling function first, then if it is not used yet, add a raise an UnimplementedError
 8. May use dummy response for functions that needs external API calls, put a comment `# TODO: implement this` in the function body
+9. Use Angular for frontend development
+10. Use FastAPI for backend development
+11. Use Google ADK for agent development
 
 
 # Tsak rules
 1. Follow the task structure provided in the task description
 2. Always update the task status in the task description
 3. When completed a task, mark it as done in the task description with concise, useful comments for the next tasks/developers to begin. But prioritize inline comments over task comments.
+4. Always ask question to better understand the task
+5. Make the implementation as simple as possible and only as told.
+6. Do stuff in feature based, starting from the frontend, then backend (endpoint). Agent development is done at another branch, so just put TODO: add agent
