@@ -1,7 +1,14 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
+import { tap, catchError, map } from 'rxjs/operators';
 import { Plant } from '../models/plant';
+
+// Interface for the API response
+interface PlantsResponse {
+    plants: Plant[];
+    total: number;
+}
 
 @Injectable({
     providedIn: 'root'
@@ -16,9 +23,27 @@ export class PlantService {
      * TODO: implement this when backend endpoint is ready
      */
     getPlants(): Observable<Plant[]> {
-        // For now, return dummy data
-        // Later this will be: 
-        return this.http.get<Plant[]>(this.baseUrl);
+        console.log('=== PlantService.getPlants() called ===');
+        console.log('Making HTTP GET request to:', this.baseUrl);
+
+        return this.http.get<PlantsResponse>(this.baseUrl).pipe(
+            tap((response: PlantsResponse) => {
+                console.log('Response received from API:', response);
+                console.log('Plants array from response:', response.plants);
+                console.log('Plants count:', response.plants?.length || 0);
+                console.log('First plant (if any):', response.plants?.[0]);
+            }),
+            map((response: PlantsResponse) => {
+                console.log('Extracting plants array from response...');
+                return response.plants || [];
+            }),
+            catchError((error: any) => {
+                console.error('HTTP error in getPlants:', error);
+                console.error('Error status:', error.status);
+                console.error('Error message:', error.message);
+                throw error;
+            })
+        );
 
         const dummyPlants: Plant[] = [
             {

@@ -85,21 +85,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     ngOnInit(): void {
+        console.log('=== Dashboard ngOnInit started ===');
         this.loadDashboardData();
         // Set up auto-refresh for selected investigation chat
         this.startChatRefresh();
 
-        // this.plantService.getPlants().subscribe({
-        //     next: (plants) => {
-        //         console.log('Plants loaded in ngOnInit:', plants);
-        //         this.plants$.next(plants);
-        //         this.plants = plants;
-        //     },
-        //     error: (error) => {
-        //         console.error('Error loading plants in ngOnInit:', error);
-        //         this.error = 'Failed to load plants';
-        //     }
-        // });
+        console.log('Loading plants in ngOnInit...');
+        this.plantService.getPlants().subscribe({
+            next: (plants) => {
+                console.log('Plants loaded in ngOnInit:', plants);
+                console.log('Plants count:', plants?.length || 0);
+                this.plants$.next(plants);
+                this.plants = plants;
+                this.modalPlants = plants;
+            },
+            error: (error) => {
+                console.error('Error loading plants in ngOnInit:', error);
+                this.error = 'Failed to load plants';
+            }
+        });
     }
 
     ngOnDestroy(): void {
@@ -406,14 +410,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     openNewInvestigationModal(content: any) {
+        console.log('=== Opening new investigation modal ===');
+        console.log('Current plants array length:', this.plants.length);
+        console.log('Current modalPlants array length:', this.modalPlants.length);
+
         // Ensure plants are loaded before opening modal
         if (this.plants.length === 0) {
+            console.log('Plants array is empty, loading plants...');
             this.plantService.getPlants().subscribe({
                 next: (plants) => {
+                    console.log('Plants loaded for modal:', plants);
+                    console.log('Plants count from API:', plants?.length || 0);
                     this.plants$.next(plants);
                     this.plants = plants;
                     this.modalPlants = plants;
-                    console.log('Plants loaded for modal:', plants);
+                    console.log('modalPlants after assignment:', this.modalPlants);
+                    console.log('Opening modal now...');
 
                     // Open modal - ng-template will use component's plants array
                     this.modalService.open(content, { size: 'lg' });
@@ -422,12 +434,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
                     console.error('Error loading plants for modal:', error);
                     this.error = 'Failed to load plants';
                     // Still open modal even if plants fail to load
+                    console.log('Opening modal despite error...');
                     this.modalService.open(content, { size: 'lg' });
                 }
             });
         } else {
             console.log('Using existing plants:', this.plants);
             this.modalPlants = this.plants;
+            console.log('modalPlants after assignment (existing):', this.modalPlants);
+            console.log('Opening modal with existing plants...');
             // Open modal - ng-template will use component's plants array
             this.modalService.open(content, { size: 'lg' });
         }
