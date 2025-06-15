@@ -1,0 +1,210 @@
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <button class="btn btn-outline-secondary me-3" (click)="goBack()">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </button>
+                    <h2 class="mb-0">Investigation Details</h2>
+                </div>
+                <div *ngIf="investigation">
+                    <span class="badge fs-6" [class]="getStatusBadgeClass(investigation.status)">
+                        {{ investigation.status | titlecase }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div *ngIf="isLoading" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-muted">Loading investigation details...</p>
+            </div>
+
+            <!-- Error State -->
+            <div *ngIf="error && !isLoading" class="alert alert-danger" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                {{ error }}
+            </div>
+
+            <!-- Investigation Content -->
+            <div *ngIf="investigation && !isLoading" class="row">
+                <!-- Left Column: Investigation Info & Progress -->
+                <div class="col-lg-4">
+                    <!-- Investigation Info Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Investigation Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Investigation ID</label>
+                                <div class="fw-bold">{{ investigation.id }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Plant</label>
+                                <div class="fw-bold">{{ investigation.plant_name || investigation.plant_id }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Date Range</label>
+                                <div class="fw-bold">
+                                    {{ investigation.start_date | date:'shortDate' }} -
+                                    {{ investigation.end_date | date:'shortDate' }}
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Status</label>
+                                <div>
+                                    <span class="badge" [class]="getStatusBadgeClass(investigation.status)">
+                                        {{ investigation.status | titlecase }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Created</label>
+                                <div class="fw-bold">{{ formatTimestamp(investigation.created_at) }}</div>
+                            </div>
+                            <div *ngIf="investigation.completed_at" class="mb-3">
+                                <label class="form-label text-muted">Completed</label>
+                                <div class="fw-bold">{{ formatTimestamp(investigation.completed_at) }}</div>
+                            </div>
+                            <div *ngIf="investigation.additional_notes" class="mb-3">
+                                <label class="form-label text-muted">Notes</label>
+                                <div class="fw-bold">{{ investigation.additional_notes }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Steps Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Investigation Progress</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="progress-steps">
+                                <div *ngFor="let step of progressSteps; let i = index" class="progress-step"
+                                    [class.completed]="step.completed"
+                                    [class.active]="!step.completed && i > 0 && progressSteps[i-1].completed">
+                                    <div class="step-indicator">
+                                        <i *ngIf="step.completed" class="fas fa-check text-success"></i>
+                                        <span *ngIf="!step.completed" class="step-number">{{ i + 1 }}</span>
+                                    </div>
+                                    <div class="step-content">
+                                        <div class="step-title">{{ step.name }}</div>
+                                        <div *ngIf="step.timestamp" class="step-timestamp text-muted">
+                                            {{ formatTimestamp(step.timestamp) }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Agent Chat & Findings -->
+                <div class="col-lg-8">
+                    <!-- Agent Findings Summary -->
+                    <div class="card mb-4" *ngIf="getAllFindings().length > 0">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-robot me-2"></i>
+                                Agent Findings Summary
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4" *ngIf="getAgentFindings('data').length > 0">
+                                    <h6 class="text-info">
+                                        <i class="fas fa-chart-line me-1"></i>
+                                        Data Agent
+                                    </h6>
+                                    <div *ngFor="let finding of getAgentFindings('data')" class="mb-2">
+                                        <small class="text-muted">{{ formatTimestamp(finding.timestamp) }}</small>
+                                        <div class="border-start border-info ps-2">{{ finding.content }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4" *ngIf="getAgentFindings('alert').length > 0">
+                                    <h6 class="text-warning">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        Alert Agent
+                                    </h6>
+                                    <div *ngFor="let finding of getAgentFindings('alert')" class="mb-2">
+                                        <small class="text-muted">{{ formatTimestamp(finding.timestamp) }}</small>
+                                        <div class="border-start border-warning ps-2">{{ finding.content }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4" *ngIf="getAgentFindings('coordinator').length > 0">
+                                    <h6 class="text-success">
+                                        <i class="fas fa-users-cog me-1"></i>
+                                        Coordinator
+                                    </h6>
+                                    <div *ngFor="let finding of getAgentFindings('coordinator')" class="mb-2">
+                                        <small class="text-muted">{{ formatTimestamp(finding.timestamp) }}</small>
+                                        <div class="border-start border-success ps-2">{{ finding.content }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Chat Messages -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-comments me-2"></i>
+                                Agent Communication
+                            </h5>
+                            <small class="text-muted">
+                                Auto-refreshing every 3 seconds
+                            </small>
+                        </div>
+                        <div class="card-body">
+                            <div class="chat-container" style="height: 500px; overflow-y: auto;">
+                                <div *ngIf="chatMessages.length === 0" class="text-center py-5 text-muted">
+                                    <i class="fas fa-robot fa-3x mb-3"></i>
+                                    <p>No agent messages yet. Agents will start communicating soon...</p>
+                                </div>
+
+                                <div *ngFor="let message of chatMessages" class="chat-message mb-3">
+                                    <div class="d-flex align-items-start">
+                                        <div class="message-avatar me-3">
+                                            <span class="badge rounded-pill"
+                                                [class]="getAgentBadgeClass(message.metadata?.['agent_name'] || 'system')">
+                                                <i class="fas fa-robot"></i>
+                                            </span>
+                                        </div>
+                                        <div class="message-content flex-grow-1">
+                                            <div
+                                                class="message-header d-flex justify-content-between align-items-center">
+                                                <div class="message-sender fw-bold">
+                                                    {{ message.metadata?.['agent_name'] || message.message_type |
+                                                    titlecase }}
+                                                </div>
+                                                <div class="message-time text-muted">
+                                                    <small>{{ formatTimestamp(message.timestamp) }}</small>
+                                                </div>
+                                            </div>
+                                            <div class="message-text mt-1">
+                                                {{ message.content }}
+                                            </div>
+                                            <div *ngIf="message.metadata && Object.keys(message.metadata).length > 1"
+                                                class="message-metadata mt-2">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-info-circle me-1"></i>
+                                                    Additional data available
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -62,7 +62,7 @@
         <!-- Investigations Tab -->
         <div *ngIf="activeTab === 'investigations' && !isLoading">
             <!-- Investigation List -->
-            <div *ngIf="!selectedInvestigation">
+            <div>
                 <!-- Empty State -->
                 <div *ngIf="investigations.length === 0" class="text-center py-5">
                     <div style="font-size: 4rem;" class="text-muted mb-3">🔍</div>
@@ -77,7 +77,8 @@
                 <div *ngIf="investigations.length > 0" class="row g-4">
                     <div *ngFor="let investigation of investigations; trackBy: trackByInvestigationId"
                         class="col-md-6 col-lg-4">
-                        <div (click)="selectInvestigation(investigation)" class="card h-100 investigation-card">
+                        <div (click)="selectInvestigation(investigation)" class="card h-100 investigation-card"
+                            style="cursor: pointer;" title="Click to view investigation details">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <h5 class="card-title">{{ getInvestigationTitle(investigation) }}</h5>
@@ -90,10 +91,6 @@
                                     <p class="mb-1">Started: {{ formatDate(investigation.created_at) }}</p>
                                     <p class="mb-1">Plant: {{ investigation.plant_name || 'Plant ID: ' +
                                         investigation.plant_id?.substring(0, 8) + '...' }}</p>
-                                    <p class="mb-0"
-                                        *ngIf="chatMessages.length > 0 && selectedInvestigation?.id === investigation.id">
-                                        Messages: {{ chatMessages.length }}
-                                    </p>
                                 </div>
 
                                 <!-- Progress Bar for Running Investigations -->
@@ -108,107 +105,17 @@
                                     </div>
                                 </div>
 
-                                <small class="text-muted">
-                                    Click to view chat and details
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Investigation Detail View -->
-            <div *ngIf="selectedInvestigation" class="card">
-                <!-- Header -->
-                <div class="card-header bg-light">
-                    <button (click)="selectedInvestigation = null; stopChatRefresh()"
-                        class="btn btn-link text-primary p-0 mb-2">
-                        ← Back to Investigations
-                    </button>
-                    <h2 class="h4 mb-2">{{ getInvestigationTitle(selectedInvestigation) }}</h2>
-                    <div class="d-flex align-items-center">
-                        <span [class]="'badge me-3 ' + getStatusColor(selectedInvestigation.status)">
-                            {{ selectedInvestigation.status | titlecase }}
-                        </span>
-                        <small class="text-muted">
-                            {{ formatDate(selectedInvestigation.created_at) }}
-                        </small>
-                    </div>
-                    <div class="mt-2 text-muted small">
-                        <div><strong>Plant:</strong> {{ selectedInvestigation.plant_name || 'Plant ID: ' +
-                            selectedInvestigation.plant_id.substring(0, 8) + '...' }}</div>
-                        <div><strong>Investigation Period:</strong> {{
-                            formatDateToDisplay(selectedInvestigation.start_date) }} - {{
-                            formatDateToDisplay(selectedInvestigation.end_date) }}</div>
-                        <div *ngIf="selectedInvestigation.additional_notes"><strong>Notes:</strong> {{
-                            selectedInvestigation.additional_notes }}</div>
-                    </div>
-                </div>
-
-                <!-- Agent Chat -->
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">AI Agent Communications</h5>
-                        <small class="text-muted" *ngIf="chatMessages.length > 0">
-                            {{ chatMessages.length }} messages
-                        </small>
-                    </div>
-
-                    <!-- Chat Messages -->
-                    <div class="border rounded p-3 bg-light chat-container"
-                        style="max-height: 400px; overflow-y: auto;">
-                        <div *ngIf="chatMessages.length === 0" class="text-center py-4">
-                            <div style="font-size: 3rem;" class="mb-2">🤖</div>
-                            <p class="text-muted">AI agents will appear here when the investigation starts...</p>
-                        </div>
-
-                        <div *ngFor="let message of chatMessages" class="d-flex mb-3">
-                            <div class="flex-shrink-0 me-3">
-                                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
-                                    style="width: 2rem; height: 2rem;">
-                                    <small class="fw-bold">
-                                        {{ getMessageAuthor(message).charAt(0).toUpperCase() }}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        Click card or button to view details
                                     </small>
+                                    <button (click)="selectInvestigation(investigation); $event.stopPropagation()"
+                                        class="btn btn-sm btn-outline-primary">
+                                        View Details
+                                    </button>
                                 </div>
                             </div>
-                            <div class="flex-grow-1">
-                                <div class="d-flex align-items-center mb-1">
-                                    <strong class="small">{{ getMessageAuthor(message) }}</strong>
-                                    <small class="text-muted ms-2">{{ formatDate(message.timestamp) }}</small>
-                                </div>
-                                <p class="small mb-0">{{ message.content }}</p>
-                            </div>
                         </div>
-                    </div>
-
-                    <!-- Findings Section -->
-                    <div *ngIf="selectedInvestigation.result" class="mt-4">
-                        <h6>Investigation Results</h6>
-                        <div class="alert alert-success">
-                            <pre>{{ selectedInvestigation.result | json }}</pre>
-                        </div>
-                    </div>
-
-                    <!-- Error Message -->
-                    <div *ngIf="selectedInvestigation.error_message" class="mt-4">
-                        <h6>Error</h6>
-                        <div class="alert alert-danger">
-                            {{ selectedInvestigation.error_message }}
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons for Completed Investigations -->
-                    <div *ngIf="selectedInvestigation.status === 'completed'" class="mt-4 d-flex gap-2">
-                        <button (click)="makeDecision('create_report', 'report')" class="btn btn-primary"
-                            [disabled]="isLoading">
-                            <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
-                            Create Report
-                        </button>
-                        <button (click)="makeDecision('create_work_order', 'work_order')" class="btn btn-success"
-                            [disabled]="isLoading">
-                            <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
-                            Create Work Order
-                        </button>
                     </div>
                 </div>
             </div>

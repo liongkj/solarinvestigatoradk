@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { NgbModal, NgbModalModule, NgbDate, NgbCalendar, NgbDateParserFormatter, NgbDatepickerModule } from '@ng-bootstrap/ng-bootstrap';
 import { interval, Subscription, forkJoin, combineLatest, BehaviorSubject } from 'rxjs';
 import { takeUntil, switchMap, tap, catchError, finalize, take } from 'rxjs/operators';
@@ -79,7 +80,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         private plantService: PlantService,
         private modalService: NgbModal,
         private calendar: NgbCalendar,
-        private formatter: NgbDateParserFormatter
+        private formatter: NgbDateParserFormatter,
+        private router: Router
     ) {
         // this.loadPlants();
     }
@@ -230,10 +232,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     selectInvestigation(investigation: Investigation) {
-        this.selectedInvestigation = investigation;
-        this.stopChatRefresh(); // Stop previous refresh
-        this.loadChatMessages();
-        this.startChatRefresh(); // Start new refresh for selected investigation
+        console.log('=== selectInvestigation called ===');
+        console.log('Investigation object:', investigation);
+        console.log('Investigation ID:', investigation.id);
+
+        if (!investigation || !investigation.id) {
+            console.error('Invalid investigation object or missing ID');
+            return;
+        }
+
+        try {
+            console.log('Attempting navigation to:', `/investigation/${investigation.id}`);
+            this.router.navigate(['/investigation', investigation.id]).then(
+                (success) => {
+                    console.log('Navigation successful:', success);
+                },
+                (error) => {
+                    console.error('Navigation failed:', error);
+                }
+            );
+        } catch (error) {
+            console.error('Error during navigation:', error);
+        }
     }
 
     private loadChatMessages() {

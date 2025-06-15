@@ -10,9 +10,14 @@
 }
 
 /* Custom card hover effects */
+.investigation-card {
+    cursor: pointer;
+}
+
 .investigation-card:hover {
     transform: translateY(-2px);
     transition: all 0.2s ease-in-out;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Custom status colors */
