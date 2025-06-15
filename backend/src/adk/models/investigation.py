@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 import uuid
 
@@ -44,14 +44,9 @@ class AgentMessage(BaseModel):
 class InvestigationRequest(BaseModel):
     """Request model for starting new investigation"""
 
-    address: str = Field(..., description="Property address to investigate")
-    monthly_usage: float = Field(..., description="Monthly electricity usage in kWh")
-    property_type: str = Field(
-        default="residential", description="Property type (residential/commercial)"
-    )
-    budget_range: Optional[str] = Field(
-        None, description="Budget range for solar installation"
-    )
+    plant_id: str = Field(..., description="ID of the plant to investigate")
+    start_date: date = Field(..., description="Start date for investigation period")
+    end_date: date = Field(..., description="End date for investigation period")
     additional_notes: Optional[str] = Field(
         None, description="Additional notes or requirements"
     )
@@ -61,10 +56,9 @@ class Investigation(BaseModel):
     """Investigation data model"""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    address: str
-    monthly_usage: float
-    property_type: str
-    budget_range: Optional[str] = None
+    plant_id: str
+    start_date: date
+    end_date: date
     additional_notes: Optional[str] = None
     status: InvestigationStatus = InvestigationStatus.PENDING
     session_id: Optional[str] = None
@@ -76,7 +70,10 @@ class Investigation(BaseModel):
     error_message: Optional[str] = None
 
     class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            date: lambda v: v.isoformat(),
+        }
 
 
 class InvestigationResponse(BaseModel):

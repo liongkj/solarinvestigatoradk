@@ -1,5 +1,14 @@
 /* Dashboard Component Styles - Bootstrap Compatible */
 
+/* Plant dropdown styles */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.hover-bg-light:hover {
+    background-color: #f8f9fa !important;
+}
+
 /* Custom card hover effects */
 .investigation-card:hover {
     transform: translateY(-2px);

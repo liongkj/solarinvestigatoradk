@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -17,6 +17,7 @@ from adk.models.investigation import (
     AgentMessage,
     AgentMessageType,
 )
+from adk.services.plant_service import PlantService
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +31,28 @@ class InvestigationService:
         self.chat_histories: Dict[str, List[AgentMessage]] = {}
         self.session_service = InMemorySessionService()
         self.runners: Dict[str, Runner] = {}
+        self.plant_service = PlantService()
 
-    async def create_investigation(
+    async def _create_investigation(
         self, request: InvestigationRequest
     ) -> Investigation:
         """Create a new solar investigation"""
+        # Validate that the plant exists
+        plant = await self.plant_service.get_plant_by_id(request.plant_id)
+        if not plant:
+            raise ValueError(f"Plant with ID {request.plant_id} not found")
+
+        # Validate date range (max 5 days)
+        date_diff = (request.end_date - request.start_date).days
+        if date_diff < 0:
+            raise ValueError("End date must be after start date")
+        if date_diff > 5:
+            raise ValueError("Date range cannot exceed 5 days")
+
         investigation = Investigation(
-            address=request.address,
-            monthly_usage=request.monthly_usage,
-            property_type=request.property_type,
-            budget_range=request.budget_range,
+            plant_id=request.plant_id,
+            start_date=request.start_date,
+            end_date=request.end_date,
             additional_notes=request.additional_notes,
             status=InvestigationStatus.PENDING,
         )
@@ -49,7 +62,8 @@ class InvestigationService:
         self.chat_histories[investigation.id] = []
 
         logger.info(
-            f"Created investigation {investigation.id} for address: {request.address}"
+            f"Created investigation {investigation.id} for plant: {request.plant_id} "
+            f"({request.start_date} to {request.end_date})"
         )
         return investigation
 
@@ -66,8 +80,10 @@ class InvestigationService:
         investigations.sort(key=lambda x: x.created_at, reverse=True)
         return investigations[offset : offset + limit]
 
-    async def start_investigation(self, investigation_id: str) -> Investigation:
+    async def start_investigation(self, request: InvestigationRequest) -> Investigation:
         """Start running the investigation using Google ADK agent"""
+        inves = await self._create_investigation(request)
+        investigation_id = inves.id
         investigation = self.investigations.get(investigation_id)
         if not investigation:
             raise ValueError(f"Investigation {investigation_id} not found")
@@ -104,10 +120,13 @@ class InvestigationService:
             )
 
             # Add initial system message
+            plant = await self.plant_service.get_plant_by_id(investigation.plant_id)
+            plant_name = plant.plant_name if plant else "Unknown Plant"
             await self._add_agent_message(
                 investigation_id,
                 AgentMessageType.SYSTEM,
-                f"Starting solar investigation for {investigation.address}",
+                f"Starting solar investigation for {plant_name} "
+                f"from {investigation.start_date} to {investigation.end_date}",
             )
 
             # TODO: implement async agent execution - for now just mark as started
@@ -141,10 +160,14 @@ class InvestigationService:
             )
 
             # Prepare query for agent
+            plant = await self.plant_service.get_plant_by_id(investigation.plant_id)
             query = {
-                "address": investigation.address,
-                "monthly_usage": investigation.monthly_usage,
-                "property_type": investigation.property_type,
+                "plant_id": investigation.plant_id,
+                "plant_name": plant.plant_name if plant else "Unknown Plant",
+                "plant_type": plant.type if plant else "Unknown",
+                "start_date": investigation.start_date.isoformat(),
+                "end_date": investigation.end_date.isoformat(),
+                "additional_notes": investigation.additional_notes,
                 "user_message": user_message,
             }
 
@@ -154,13 +177,19 @@ class InvestigationService:
             )
 
             final_response = "No response received"
+            session_id = investigation.session_id
+            if not session_id:
+                raise ValueError(
+                    f"No session found for investigation {investigation_id}"
+                )
+
             async for event in runner.run_async(
                 user_id=investigation.user_id,
-                session_id=investigation.session_id,
+                session_id=session_id,
                 new_message=user_content,
             ):
                 if event.is_final_response() and event.content and event.content.parts:
-                    final_response = event.content.parts[0].text
+                    final_response = event.content.parts[0].text or "Empty response"
 
             # Add agent response to chat history
             await self._add_agent_message(
@@ -250,7 +279,3 @@ class InvestigationService:
 
         self.chat_histories[investigation_id].append(message)
         return message
-
-
-# Global service instance
-investigation_service = InvestigationService()

@@ -68,17 +68,14 @@ async def start_new_investigation(
     the solar feasibility analysis process.
     """
     try:
-        # Create the investigation
-        investigation = await investigation_service.create_investigation(request)
 
         # Start the investigation process
-        investigation = await investigation_service.start_investigation(
-            investigation.id
-        )
+        investigation = await investigation_service.start_investigation(request)
 
         return InvestigationResponse(
             investigation=investigation,
-            message=f"Investigation started for {request.address}",
+            message=f"Investigation started for plant {request.plant_id} "
+            f"from {request.start_date} to {request.end_date}",
         )
 
     except ValueError as e:

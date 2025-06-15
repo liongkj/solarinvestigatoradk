@@ -12,6 +12,7 @@ import logging
 from google.adk.cli.fast_api import get_fast_api_app
 from adk.config import settings
 from adk.controllers import investigation_management_router
+from adk.controllers.plant_controller import router as plant_router
 
 
 # Configure logging
@@ -53,6 +54,7 @@ app.add_middleware(
 
 # Include our custom investigation routers
 app.include_router(investigation_management_router)
+app.include_router(plant_router)
 
 
 # Add our custom endpoints

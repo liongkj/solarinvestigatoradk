@@ -29,19 +29,18 @@ export interface AgentMessage {
 }
 
 export interface InvestigationRequest {
-    address: string;
-    monthly_usage: number;
-    property_type?: string;
-    budget_range?: string;
+    plant_id: string;
+    start_date: string; // ISO date string (YYYY-MM-DD)
+    end_date: string; // ISO date string (YYYY-MM-DD)
     additional_notes?: string;
 }
 
 export interface Investigation {
     id: string;
-    address: string;
-    monthly_usage: number;
-    property_type: string;
-    budget_range?: string;
+    plant_id: string;
+    plant_name?: string; // Will be populated from plant data
+    start_date: string; // ISO date string
+    end_date: string; // ISO date string
     additional_notes?: string;
     status: InvestigationStatus;
     session_id?: string;

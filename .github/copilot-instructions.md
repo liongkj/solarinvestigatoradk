@@ -40,3 +40,6 @@ uv add google-adk-python
 2. Use `httpx` for HTTP requests
 3. Use `pydantic` for data validation
 
+
+## Angular rules
+1. Use RxJS for state management
