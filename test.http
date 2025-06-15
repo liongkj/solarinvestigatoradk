@@ -1,0 +1,47 @@
+@base_url = http://localhost:8000
+
+### Health Check
+GET {{base_url}}/api/investigations/health
+
+### Demo Investigation
+GET {{base_url}}/api/investigations/demo
+
+### Solar Feasibility Investigation - Residential (California)
+POST {{base_url}}/api/investigations/solar-feasibility
+Content-Type: application/json
+
+{
+  "address": "123 Main St, San Jose, CA 95120",
+  "monthly_usage": 850,
+  "property_type": "residential"
+}
+
+### Solar Feasibility Investigation - Commercial (Texas)
+POST {{base_url}}/api/investigations/solar-feasibility
+Content-Type: application/json
+
+{
+  "address": "456 Business Blvd, Austin, TX 78701",
+  "monthly_usage": 2500,
+  "property_type": "commercial"
+}
+
+### Solar Feasibility Investigation - High Usage Residential (New York)
+POST {{base_url}}/api/investigations/solar-feasibility
+Content-Type: application/json
+
+{
+  "address": "789 Oak Avenue, New York, NY 10001",
+  "monthly_usage": 1200,
+  "property_type": "residential"
+}
+
+### Solar Feasibility Investigation - Low Usage (Florida)
+POST {{base_url}}/api/investigations/solar-feasibility
+Content-Type: application/json
+
+{
+  "address": "321 Palm Street, Miami, FL 33101",
+  "monthly_usage": 600,
+  "property_type": "residential"
+}
