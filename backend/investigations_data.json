@@ -1,0 +1,32 @@
+{
+  "49c2b6a2-6f30-49d5-9b8e-a82086f36a72": {
+    "id": "49c2b6a2-6f30-49d5-9b8e-a82086f36a72",
+    "plant_id": "plant-002",
+    "start_date": "2025-06-10",
+    "end_date": "2025-06-14",
+    "additional_notes": "Testing file-based persistence",
+    "status": "running",
+    "session_id": "session_49c2b6a2-6f30-49d5-9b8e-a82086f36a72",
+    "user_id": "api_user",
+    "created_at": "2025-06-15T16:06:56.109170",
+    "updated_at": "2025-06-15T16:06:56.109595",
+    "completed_at": null,
+    "result": null,
+    "error_message": null
+  },
+  "1da0fb65-99e8-4fb0-b8ea-e7b0fcb92358": {
+    "id": "1da0fb65-99e8-4fb0-b8ea-e7b0fcb92358",
+    "plant_id": "plant-006",
+    "start_date": "2025-06-14",
+    "end_date": "2025-06-14",
+    "additional_notes": "dasd",
+    "status": "running",
+    "session_id": "session_1da0fb65-99e8-4fb0-b8ea-e7b0fcb92358",
+    "user_id": "api_user",
+    "created_at": "2025-06-15T16:08:04.334974",
+    "updated_at": "2025-06-15T16:08:04.335426",
+    "completed_at": null,
+    "result": null,
+    "error_message": null
+  }
+}

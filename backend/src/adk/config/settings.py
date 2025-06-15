@@ -48,8 +48,8 @@ class Settings(BaseSettings):
 
     # Database Configuration for ADK DatabaseSessionService
     database_url: str = Field(
-        default="postgresql://adk_user:adk_password@localhost:5432/adk_solar_investigator",
-        description="Database URL for ADK session storage",
+        default="sqlite:///./solar_investigation_data.db",
+        description="Database URL for ADK session storage (SQLite for dev, PostgreSQL for prod)",
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy echo")
 
