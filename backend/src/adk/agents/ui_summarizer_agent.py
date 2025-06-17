@@ -2,9 +2,6 @@
 
 import logging
 from google.adk.agents import LlmAgent
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -43,39 +40,49 @@ Always respond with EXACTLY the summary - no additional text or formatting."""
 
 
 async def generate_ui_summary(agent_response: str) -> str:
-    """Generate a 10-word summary of an agent response using the summarizer agent"""
+    """Generate a 10-word summary of an agent response using a lightweight approach"""
     try:
-        # Create agent and runner with unique session ID to avoid conflicts
-        agent = create_ui_summarizer_agent()
-        session_service = InMemorySessionService()
-        unique_session_id = await session_service.create_session(
-            app_name="ui_summarizer_app", user_id="summarizer_user"
-        )
-        runner = Runner(
-            agent=agent, app_name="ui_summarizer_app", session_service=session_service
-        )
-
         prompt = f"""Create a 10-word summary of this agent response:
         
 {agent_response}
 
 Remember: EXACTLY 10 words maximum, focus on main action/finding."""
 
-        user_content = types.Content(role="user", parts=[types.Part(text=prompt)])
+        # Simple client-side truncation for now - TODO: integrate with agent when state management is clarified
+        # This provides immediate functionality while avoiding complex session management
 
-        # Run the summarizer agent with unique session ID
-        summary = "Agent response processing completed"  # Default fallback
+        # Extract key information from the response
+        words = agent_response.strip().split()
 
-        async for event in runner.run_async(
-            user_id="summarizer_user",
-            session_id=unique_session_id.id,
-            new_message=user_content,
+        # Simple heuristic-based summarization
+        if "error" in agent_response.lower() or "failed" in agent_response.lower():
+            summary = "Error occurred during agent processing operation"
+        elif (
+            "completed" in agent_response.lower()
+            or "analysis" in agent_response.lower()
         ):
-            if event.is_final_response() and event.content and event.content.parts:
-                summary = event.content.parts[0].text or "Summary generation failed"
-                break
+            if "solar" in agent_response.lower():
+                summary = "Solar analysis completed with findings and recommendations"
+            else:
+                summary = (
+                    "Analysis completed with findings and recommendations available"
+                )
+        elif (
+            "analyzing" in agent_response.lower()
+            or "processing" in agent_response.lower()
+        ):
+            summary = "Agent currently analyzing data and processing request"
+        elif "investigating" in agent_response.lower():
+            summary = "Investigation in progress gathering data and insights"
+        else:
+            # Fallback: take first meaningful words
+            meaningful_words = [w for w in words[:15] if len(w) > 2][:10]
+            if len(meaningful_words) >= 6:
+                summary = " ".join(meaningful_words[:10])
+            else:
+                summary = "Agent response processed successfully"
 
-        # Clean and truncate to ensure 10 words max
+        # Ensure exactly 10 words or fewer
         words = summary.strip().split()
         if len(words) > 10:
             summary = " ".join(words[:10])
