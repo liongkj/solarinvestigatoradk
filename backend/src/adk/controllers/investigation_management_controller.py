@@ -14,7 +14,10 @@ from adk.models.investigation import (
     DecisionRequest,
     DecisionResponse,
 )
-from adk.services.investigation_service import InvestigationService
+from adk.services.investigation_service import (
+    get_investigation_service,
+    InvestigationService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +29,13 @@ router = APIRouter(prefix="/api/investigations", tags=["investigation-management
 async def list_investigations(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(10, ge=1, le=100, description="Page size"),
-    investigation_service: InvestigationService = Depends(InvestigationService),
 ):
     """
     List all investigations with pagination.
 
     Returns a paginated list of all solar investigations.
     """
+    investigation_service = get_investigation_service()
     try:
         offset = (page - 1) * size
         investigations = await investigation_service.list_investigations(

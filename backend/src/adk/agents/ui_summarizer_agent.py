@@ -45,9 +45,12 @@ Always respond with EXACTLY the summary - no additional text or formatting."""
 async def generate_ui_summary(agent_response: str) -> str:
     """Generate a 10-word summary of an agent response using the summarizer agent"""
     try:
-        # Create agent and runner
+        # Create agent and runner with unique session ID to avoid conflicts
         agent = create_ui_summarizer_agent()
         session_service = InMemorySessionService()
+        unique_session_id = await session_service.create_session(
+            app_name="ui_summarizer_app", user_id="summarizer_user"
+        )
         runner = Runner(
             agent=agent, app_name="ui_summarizer_app", session_service=session_service
         )
@@ -60,11 +63,12 @@ Remember: EXACTLY 10 words maximum, focus on main action/finding."""
 
         user_content = types.Content(role="user", parts=[types.Part(text=prompt)])
 
-        # Run the summarizer agent
+        # Run the summarizer agent with unique session ID
         summary = "Agent response processing completed"  # Default fallback
+
         async for event in runner.run_async(
             user_id="summarizer_user",
-            session_id="summarizer_session",
+            session_id=unique_session_id.id,
             new_message=user_content,
         ):
             if event.is_final_response() and event.content and event.content.parts:

@@ -27,6 +27,17 @@ from adk.services.broadcast_service import broadcast_service
 
 logger = logging.getLogger(__name__)
 
+# Global singleton instance
+_investigation_service_instance = None
+
+
+def get_investigation_service() -> "InvestigationService":
+    """Get singleton instance of InvestigationService"""
+    global _investigation_service_instance
+    if _investigation_service_instance is None:
+        _investigation_service_instance = InvestigationService()
+    return _investigation_service_instance
+
 
 class InvestigationService:
     """Service for managing solar investigations using pure database storage"""
@@ -299,10 +310,22 @@ class InvestigationService:
             return []
 
     async def start_investigation(self, request: InvestigationRequest) -> Investigation:
-        """Start a new solar investigation with immediate ADK agent initialization"""
+        """Start a new solar investigation - queue for background processing"""
         # Create the investigation record and session
         investigation = await self._create_investigation(request)
 
+        # Start background processing without blocking the API response
+        import asyncio
+
+        asyncio.create_task(self._process_investigation_async(investigation))
+
+        logger.info(
+            f"Queued investigation {investigation.id} for background processing"
+        )
+        return investigation
+
+    async def _process_investigation_async(self, investigation: Investigation) -> None:
+        """Process investigation in background task"""
         try:
             # Update status to running
             await self._update_investigation_status(
@@ -389,6 +412,9 @@ class InvestigationService:
                         session_id=session_id,
                         new_message=user_content,
                     ):
+                        # Broadcast event in real-time to WebSocket clients
+                        await self._broadcast_event_update(investigation.id, event)
+
                         if (
                             event.is_final_response()
                             and event.content
@@ -420,27 +446,22 @@ class InvestigationService:
                             keyword in response_lower
                             for keyword in ["complete", "concluded", "final", "summary"]
                         ):
-                            investigation.status = InvestigationStatus.COMPLETED
                             await self._update_investigation_status(
                                 investigation.id, InvestigationStatus.COMPLETED
                             )
                         else:
                             # Default to requiring attention for user follow-up
-                            investigation.status = (
-                                InvestigationStatus.REQUIRES_ATTENTION
-                            )
                             await self._update_investigation_status(
                                 investigation.id, InvestigationStatus.REQUIRES_ATTENTION
                             )
                     else:
                         # Empty or minimal response - requires attention
-                        investigation.status = InvestigationStatus.REQUIRES_ATTENTION
                         await self._update_investigation_status(
                             investigation.id, InvestigationStatus.REQUIRES_ATTENTION
                         )
 
                     logger.info(
-                        f"Successfully started investigation {investigation.id} with status {investigation.status.value}"
+                        f"Successfully processed investigation {investigation.id}"
                     )
                     break  # Success, exit retry loop
 
@@ -453,22 +474,25 @@ class InvestigationService:
                         await self._update_investigation_status(
                             investigation.id,
                             InvestigationStatus.FAILED,
-                            error_message=f"Failed to start investigation after {max_retries + 1} attempts: {str(e)}",
+                            error_message=f"Failed to process investigation after {max_retries + 1} attempts: {str(e)}",
                         )
                         raise
                     # Wait before retry
                     await asyncio.sleep(1)
 
-            logger.info(f"Started investigation {investigation.id}")
+            logger.info(
+                f"Completed background processing for investigation {investigation.id}"
+            )
 
         except Exception as e:
             await self._update_investigation_status(
                 investigation.id, InvestigationStatus.FAILED, error_message=str(e)
             )
-            logger.error(f"Failed to start investigation {investigation.id}: {e}")
-            raise
-
-        return investigation
+            logger.error(f"Failed to process investigation {investigation.id}: {e}")
+        finally:
+            # Clean up runner from memory after processing
+            if investigation.id in self.runners:
+                del self.runners[investigation.id]
 
     async def run_investigation_step(
         self, investigation_id: str, user_message: str
@@ -505,6 +529,9 @@ class InvestigationService:
                 session_id=session_id,
                 new_message=user_content,
             ):
+                # Broadcast event in real-time to WebSocket clients
+                await self._broadcast_event_update(investigation_id, event)
+
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or "Empty response"
 
@@ -777,6 +804,9 @@ class InvestigationService:
                 session_id=session_id,
                 new_message=decision_content,
             ):
+                # Broadcast event in real-time to WebSocket clients
+                await self._broadcast_event_update(investigation_id, event)
+
                 if event.is_final_response() and event.content and event.content.parts:
                     return event.content.parts[0].text or "Decision acknowledged"
 
@@ -985,3 +1015,40 @@ class InvestigationService:
 
         except Exception as e:
             logger.error(f"Error storing UI summary for {investigation_id}: {e}")
+
+    async def _broadcast_event_update(
+        self, investigation_id: str, event: Event
+    ) -> None:
+        """Broadcast event updates to WebSocket clients in real-time"""
+        try:
+            # Only broadcast certain types of events to avoid spam
+            if event.content and event.content.parts:
+                # Convert event to AgentMessage format for frontend
+                message = {
+                    "id": str(uuid.uuid4()),
+                    "investigation_id": investigation_id,
+                    "message_type": "agent" if event.author != "user" else "user",
+                    "content": (
+                        event.content.parts[0].text if event.content.parts else ""
+                    ),
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": {
+                        "agent_name": event.author,
+                        "event_id": event.id if hasattr(event, "id") else None,
+                        "invocation_id": (
+                            event.invocation_id
+                            if hasattr(event, "invocation_id")
+                            else None
+                        ),
+                    },
+                }
+
+                # Broadcast new message to connected WebSocket clients
+                await broadcast_service.broadcast_new_message(investigation_id, message)
+
+                logger.debug(
+                    f"Broadcasted event update for investigation {investigation_id}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error broadcasting event update for {investigation_id}: {e}")

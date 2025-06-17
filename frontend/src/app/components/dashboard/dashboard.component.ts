@@ -198,17 +198,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
             takeUntil(this.destroy$),
             tap(response => {
                 if (response) {
+                    console.log('Investigation submitted successfully:', response);
+
                     // Add plant name to investigation for display
                     const plant = this.plants.find(p => p.plant_id === response.investigation.plant_id);
                     if (plant) {
                         response.investigation.plant_name = plant.plant_name;
                     }
 
-                    // Add to investigations list and select it
+                    // Add to investigations list 
                     this.investigations.unshift(response.investigation);
-                    this.selectedInvestigation = response.investigation;
 
-                    // Reset form
+                    // Reset form immediately
                     this.newInvestigationForm = {
                         plant_id: '',
                         start_date: null,
@@ -216,8 +217,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
                         additional_notes: ''
                     };
 
-                    // Load chat messages for the new investigation
-                    this.loadChatMessages();
+                    // Navigate to investigation detail page immediately
+                    // The investigation will be processed in the background
+                    console.log('Navigating to investigation detail page:', response.investigation.id);
+                    this.router.navigate(['/investigation', response.investigation.id]);
                 }
             }),
             catchError(error => {

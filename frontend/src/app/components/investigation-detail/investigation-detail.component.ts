@@ -31,6 +31,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // Auto-refresh subscription
     private refreshSubscription: Subscription | null = null;
     private destroy$ = new Subject<void>();
+    private statusRefreshInterval: any = null;
 
     // Progress tracking
     progressSteps: ProgressStep[] = [
@@ -47,6 +48,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     // WebSocket connection for real-time updates
     private websocket: WebSocket | null = null;
+    private pingInterval: any = null;
 
     constructor(
         private route: ActivatedRoute,
@@ -68,12 +70,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
         this.loadInvestigationDetails();
         this.setupWebSocket();
+        this.startStatusRefresh();
     }
 
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
         this.closeWebSocket();
+        this.stopStatusRefresh();
     }
 
     loadInvestigationDetails(): void {
@@ -90,15 +94,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             }),
             finalize(() => {
                 this.isLoading = false;
-            })
-        ).subscribe(investigation => {
-            if (investigation) {
-                console.log('Investigation loaded:', investigation);
-                this.investigation = investigation;
-                this.updateProgressSteps();
-                this.loadChatMessages();
-            }
-        });
+            })).subscribe(investigation => {
+                if (investigation) {
+                    console.log('Investigation loaded:', investigation);
+                    this.investigation = investigation;
+                    this.updateProgressSteps();
+                    this.loadChatMessages();
+
+                    // Only start status refresh if WebSocket is not connected or not working
+                    if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+                        this.startStatusRefresh();
+                    }
+                }
+            });
     }
 
     loadChatMessages(): void {
@@ -396,30 +404,56 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
         this.websocket.onopen = () => {
             console.log('WebSocket connected for investigation:', this.investigationId);
+            // Send a ping to keep connection alive
+            this.sendWebSocketPing();
+            // Set up periodic ping
+            this.pingInterval = setInterval(() => {
+                this.sendWebSocketPing();
+            }, 30000); // Ping every 30 seconds
+
+            // Stop any existing polling since WebSocket is now connected
+            this.stopStatusRefresh();
+            console.log('Stopped polling - using WebSocket for real-time updates');
         };
 
         this.websocket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
+                console.log('WebSocket message received:', message);
                 this.handleWebSocketMessage(message);
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
             }
         };
 
-        this.websocket.onclose = () => {
-            console.log('WebSocket connection closed');
-            // Attempt to reconnect after 3 seconds
-            setTimeout(() => {
-                if (!this.destroy$.closed) {
+        this.websocket.onclose = (event) => {
+            console.log('WebSocket connection closed:', event);
+            // Start fallback polling if investigation is still in progress
+            if (this.investigation && (
+                this.investigation.status === InvestigationStatus.PENDING ||
+                this.investigation.status === InvestigationStatus.RUNNING
+            )) {
+                console.log('WebSocket disconnected, starting fallback polling...');
+                this.startStatusRefresh();
+            }
+
+            // Attempt to reconnect after 3 seconds if not intentionally closed
+            if (!this.destroy$.closed) {
+                setTimeout(() => {
                     this.connectWebSocket();
-                }
-            }, 3000);
+                }, 3000);
+            }
         };
 
         this.websocket.onerror = (error) => {
             console.error('WebSocket error:', error);
         };
+    }
+
+    private sendWebSocketPing(): void {
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.websocket.send(JSON.stringify({ type: 'ping' }));
+        }
     }
 
     private subscribeToInvestigationUpdates(): void {
@@ -433,28 +467,40 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         this.websocket.send(JSON.stringify(payload));
     }
 
-    private handleWebSocketMessage(data: string): void {
-        // Handle incoming WebSocket messages
-        const message = JSON.parse(data);
+    private handleWebSocketMessage(message: any): void {
+        console.log('Processing WebSocket message:', message);
 
         switch (message.type) {
+            case 'connection_established':
+                console.log('WebSocket connection confirmed:', message.data);
+                break;
+
             case 'investigation_update':
-                this.handleInvestigationUpdate(message.payload);
+                this.handleInvestigationUpdate(message.data);
                 break;
+
             case 'chat_message':
-                this.handleChatMessage(message.payload);
+                this.handleChatMessage(message.data);
                 break;
+
             case 'ui_summary_update':
                 this.handleUiSummaryUpdate(message.data);
                 break;
+
             case 'investigation_status':
                 this.handleStatusUpdate(message.data);
                 break;
+
             case 'new_message':
                 this.handleNewMessage(message.data);
                 break;
+
+            case 'pong':
+                // Handle pong response
+                break;
+
             default:
-                console.warn('Unknown message type:', message.type);
+                console.warn('Unknown WebSocket message type:', message.type, message);
         }
     }
 
@@ -469,21 +515,18 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         console.log('Chat message received:', payload);
         // Add new message to chat history
         this.chatMessages.push(payload);
-    }
-
-    private handleUiSummaryUpdate(data: any): void {
-        console.log('UI Summary update received:', data);
+    } private handleUiSummaryUpdate(data: any): void {
+        console.log('UI Summary update received via WebSocket:', data);
         if (data.ui_summary && data.investigation_id === this.investigationId) {
-            // Find the most recent agent message to update with UI summary
+            // Find and update the most recent agent message directly
             for (let i = this.chatMessages.length - 1; i >= 0; i--) {
                 const message = this.chatMessages[i];
                 if (message.message_type === 'agent') {
                     message.ui_summary = data.ui_summary;
-                    // Also update full content if provided
                     if (data.full_content) {
                         message.content = data.full_content;
                     }
-                    console.log('Updated message with UI summary:', message);
+                    console.log('Updated message with UI summary via WebSocket:', message);
 
                     // Trigger change detection
                     this.chatMessages = [...this.chatMessages];
@@ -491,26 +534,44 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 }
             }
         }
-    }
-
-    private handleStatusUpdate(data: any): void {
-        console.log('Status update received:', data);
-        if (this.investigation && data.status) {
+    } private handleStatusUpdate(data: any): void {
+        console.log('Status update received via WebSocket:', data);
+        if (this.investigation && data.status && data.investigation_id === this.investigationId) {
+            // Update status directly without making HTTP request
             this.investigation.status = data.status;
             this.updateProgressSteps();
-        }
-    }
 
-    private handleNewMessage(data: any): void {
-        console.log('New message received:', data);
-        if (data.message && data.investigation_id === this.investigationId) {
-            this.chatMessages.push(data.message);
-            // Update progress steps when new messages arrive
+            // Stop polling since WebSocket is working
+            this.stopStatusRefresh();
+
+            console.log('Investigation status updated via WebSocket to:', data.status);
+        }
+    } private handleNewMessage(data: any): void {
+        console.log('New message received via WebSocket:', data);
+        if (data && data.investigation_id === this.investigationId) {
+            // Add the new message directly to chat without HTTP request
+            this.chatMessages.push(data);
             this.updateProgressSteps();
+
+            // Trigger change detection
+            this.chatMessages = [...this.chatMessages];
+
+            console.log('Added new message via WebSocket');
+        } else if (data && !data.investigation_id) {
+            // If it's a direct message object without investigation_id, add it
+            this.chatMessages.push(data);
+            this.updateProgressSteps();
+
+            // Trigger change detection
+            this.chatMessages = [...this.chatMessages];
         }
     }
 
     private closeWebSocket(): void {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
         if (this.websocket) {
             this.websocket.close();
             this.websocket = null;
@@ -534,4 +595,93 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     // Make Object available in template
     Object = Object;
+
+    private startStatusRefresh(): void {
+        // Only refresh if investigation is in progress AND WebSocket is not connected
+        if (this.investigation && (
+            this.investigation.status === InvestigationStatus.PENDING ||
+            this.investigation.status === InvestigationStatus.RUNNING
+        ) && (!this.websocket || this.websocket.readyState !== WebSocket.OPEN)) {
+            // Fallback to polling only if WebSocket is not available
+            console.log('WebSocket not available, falling back to periodic status refresh');
+            this.statusRefreshInterval = setInterval(() => {
+                this.refreshInvestigationStatus();
+            }, 10000); // Reduced frequency to 10 seconds as fallback
+        } else {
+            console.log('Using WebSocket for real-time updates, no polling needed');
+        }
+    }
+
+    private refreshInvestigationStatus(): void {
+        if (!this.investigationId) return;
+
+        // Only refresh if still in progress AND WebSocket is not working
+        if (this.investigation && (
+            this.investigation.status === InvestigationStatus.PENDING ||
+            this.investigation.status === InvestigationStatus.RUNNING
+        ) && (!this.websocket || this.websocket.readyState !== WebSocket.OPEN)) {
+            console.log('Polling for investigation status (WebSocket fallback)...');
+            this.investigationService.getInvestigation(this.investigationId).pipe(
+                takeUntil(this.destroy$),
+                catchError(error => {
+                    console.error('Error refreshing investigation status:', error);
+                    return of(null);
+                })
+            ).subscribe(investigation => {
+                if (investigation) {
+                    const oldStatus = this.investigation?.status;
+                    this.investigation = investigation;
+                    this.updateProgressSteps();
+
+                    // If status changed to completed/failed, stop refreshing and reload chat
+                    if (oldStatus !== investigation.status && (
+                        investigation.status === InvestigationStatus.COMPLETED ||
+                        investigation.status === InvestigationStatus.FAILED
+                    )) {
+                        this.stopStatusRefresh();
+                        this.loadChatMessages();
+                    }
+                }
+            });
+        } else {
+            // Stop refreshing if investigation is no longer in progress or WebSocket is working
+            this.stopStatusRefresh();
+        }
+    }
+
+    private stopStatusRefresh(): void {
+        if (this.statusRefreshInterval) {
+            clearInterval(this.statusRefreshInterval);
+            this.statusRefreshInterval = null;
+        }
+    }
+
+    // Helper methods for UI state
+    isInvestigationInProgress(): boolean {
+        return this.investigation && (
+            this.investigation.status === InvestigationStatus.PENDING ||
+            this.investigation.status === InvestigationStatus.RUNNING
+        ) || false;
+    }
+
+    getStatusMessage(): string {
+        if (!this.investigation) return 'Loading investigation...';
+
+        switch (this.investigation.status) {
+            case InvestigationStatus.PENDING:
+                return 'Investigation queued and waiting to start...';
+            case InvestigationStatus.RUNNING:
+                return 'Investigation in progress - agents are analyzing...';
+            case InvestigationStatus.COMPLETED:
+                return 'Investigation completed successfully';
+            case InvestigationStatus.FAILED:
+                return 'Investigation failed - please check details';
+            default:
+                return `Investigation status: ${this.investigation.status}`;
+        }
+    }
+
+    shouldShowLoadingIndicator(): boolean {
+        return this.isInvestigationInProgress() || this.isLoading;
+    }
 }
