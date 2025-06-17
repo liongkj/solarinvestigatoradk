@@ -1,12 +1,15 @@
 """WebSocket endpoints for real-time investigation updates"""
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from typing import Dict, Set
+from typing import Dict, Set, TYPE_CHECKING
 import json
 import logging
 import asyncio
 
-from adk.services.investigation_service import InvestigationService
+from adk.services.broadcast_service import broadcast_service
+
+if TYPE_CHECKING:
+    from adk.services.investigation_service import InvestigationService
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +61,24 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+# Initialize the broadcast service with the connection manager when module loads
+def init_broadcast_service():
+    """Initialize the broadcast service with the connection manager"""
+    try:
+        broadcast_service.set_connection_manager(manager)
+        logger.info("Broadcast service initialized with connection manager")
+    except Exception as e:
+        logger.error(f"Failed to initialize broadcast service: {e}")
+
+
+# Call initialization immediately
+init_broadcast_service()
+
+
 @router.websocket("/investigations/{investigation_id}")
 async def websocket_investigation_updates(
     websocket: WebSocket,
     investigation_id: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
 ):
     """
     WebSocket endpoint for real-time investigation updates.
@@ -75,49 +91,16 @@ async def websocket_investigation_updates(
     await manager.connect(websocket, investigation_id)
 
     try:
-        # Send initial investigation data
-        investigation = await investigation_service.get_investigation(investigation_id)
-        if investigation:
-            await manager.send_personal_message(
-                json.dumps(
-                    {
-                        "type": "investigation_status",
-                        "data": {
-                            "investigation_id": investigation_id,
-                            "status": investigation.status.value,
-                            "updated_at": investigation.updated_at.isoformat(),
-                        },
-                    }
-                ),
-                websocket,
-            )
-
-        # Send latest UI summary if available
-        try:
-            session_id = investigation_service._get_session_id(investigation_id)
-            session = await investigation_service.session_service.get_session(
-                app_name=investigation_service.app_name,
-                user_id=investigation_service.default_user_id,
-                session_id=session_id,
-            )
-
-            if session and session.state.get("ui_state"):
-                ui_state = session.state["ui_state"]
-                await manager.send_personal_message(
-                    json.dumps(
-                        {
-                            "type": "ui_summary_update",
-                            "data": {
-                                "investigation_id": investigation_id,
-                                "ui_summary": ui_state.get("latest_ui_summary"),
-                                "last_update": ui_state.get("last_summary_update"),
-                            },
-                        }
-                    ),
-                    websocket,
-                )
-        except Exception as e:
-            logger.warning(f"Could not send initial UI summary: {e}")
+        # Send initial connection confirmation
+        await websocket.send_json(
+            {
+                "type": "connection_established",
+                "data": {
+                    "investigation_id": investigation_id,
+                    "message": "Connected to investigation updates",
+                },
+            }
+        )
 
         # Keep connection alive and handle incoming messages
         while True:
@@ -131,25 +114,6 @@ async def websocket_investigation_updates(
                     await manager.send_personal_message(
                         json.dumps({"type": "pong"}), websocket
                     )
-                elif message.get("type") == "request_status":
-                    # Send current investigation status
-                    investigation = await investigation_service.get_investigation(
-                        investigation_id
-                    )
-                    if investigation:
-                        await manager.send_personal_message(
-                            json.dumps(
-                                {
-                                    "type": "investigation_status",
-                                    "data": {
-                                        "investigation_id": investigation_id,
-                                        "status": investigation.status.value,
-                                        "updated_at": investigation.updated_at.isoformat(),
-                                    },
-                                }
-                            ),
-                            websocket,
-                        )
 
             except WebSocketDisconnect:
                 break
@@ -163,50 +127,5 @@ async def websocket_investigation_updates(
         manager.disconnect(websocket, investigation_id)
 
 
-# Helper function to broadcast updates (to be called from service)
-async def broadcast_ui_summary_update(
-    investigation_id: str, ui_summary: str, full_content: str
-):
-    """Broadcast UI summary updates to connected clients"""
-    await manager.broadcast_to_investigation(
-        investigation_id,
-        {
-            "type": "ui_summary_update",
-            "data": {
-                "investigation_id": investigation_id,
-                "ui_summary": ui_summary,
-                "full_content": full_content,
-                "timestamp": asyncio.get_event_loop().time(),
-            },
-        },
-    )
-
-
-async def broadcast_status_update(investigation_id: str, status: str):
-    """Broadcast status updates to connected clients"""
-    await manager.broadcast_to_investigation(
-        investigation_id,
-        {
-            "type": "investigation_status",
-            "data": {
-                "investigation_id": investigation_id,
-                "status": status,
-                "timestamp": asyncio.get_event_loop().time(),
-            },
-        },
-    )
-
-
-async def broadcast_new_message(investigation_id: str, message: dict):
-    """Broadcast new chat messages to connected clients"""
-    await manager.broadcast_to_investigation(
-        investigation_id,
-        {
-            "type": "new_message",
-            "data": {
-                "investigation_id": investigation_id,
-                "message": message,
-                "timestamp": asyncio.get_event_loop().time(),
-            },
-        },
-    )
+# Ensure broadcast service is initialized
+init_broadcast_service()

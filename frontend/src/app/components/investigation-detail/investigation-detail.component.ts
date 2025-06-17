@@ -67,14 +67,12 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         }
 
         this.loadInvestigationDetails();
-        this.startAutoRefresh();
         this.setupWebSocket();
     }
 
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
-        this.stopAutoRefresh();
         this.closeWebSocket();
     }
 
@@ -116,37 +114,6 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             console.log('Chat history loaded:', response);
             this.chatMessages = response.messages || [];
         });
-    }
-
-    private startAutoRefresh(): void {
-        console.log('Starting auto-refresh for investigation details...');
-
-        this.refreshSubscription = interval(3000).pipe(
-            takeUntil(this.destroy$),
-            switchMap(() => {
-                if (!this.investigationId) return of(null);
-
-                return this.investigationService.getInvestigation(this.investigationId).pipe(
-                    catchError(error => {
-                        console.error('Auto-refresh error:', error);
-                        return of(null);
-                    })
-                );
-            })
-        ).subscribe(investigation => {
-            if (investigation) {
-                this.investigation = investigation;
-                this.updateProgressSteps();
-                this.loadChatMessages();
-            }
-        });
-    }
-
-    private stopAutoRefresh(): void {
-        if (this.refreshSubscription) {
-            this.refreshSubscription.unsubscribe();
-            this.refreshSubscription = null;
-        }
     }
 
     private updateProgressSteps(): void {
@@ -506,11 +473,22 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     private handleUiSummaryUpdate(data: any): void {
         console.log('UI Summary update received:', data);
-        if (data.ui_summary) {
-            // Update the latest message with UI summary if it's an agent message
-            const latestMessage = this.chatMessages[this.chatMessages.length - 1];
-            if (latestMessage && latestMessage.message_type === 'agent') {
-                latestMessage.ui_summary = data.ui_summary;
+        if (data.ui_summary && data.investigation_id === this.investigationId) {
+            // Find the most recent agent message to update with UI summary
+            for (let i = this.chatMessages.length - 1; i >= 0; i--) {
+                const message = this.chatMessages[i];
+                if (message.message_type === 'agent') {
+                    message.ui_summary = data.ui_summary;
+                    // Also update full content if provided
+                    if (data.full_content) {
+                        message.content = data.full_content;
+                    }
+                    console.log('Updated message with UI summary:', message);
+
+                    // Trigger change detection
+                    this.chatMessages = [...this.chatMessages];
+                    break;
+                }
             }
         }
     }
@@ -525,8 +503,10 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     private handleNewMessage(data: any): void {
         console.log('New message received:', data);
-        if (data.message) {
+        if (data.message && data.investigation_id === this.investigationId) {
             this.chatMessages.push(data.message);
+            // Update progress steps when new messages arrive
+            this.updateProgressSteps();
         }
     }
 

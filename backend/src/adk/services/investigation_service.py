@@ -23,10 +23,7 @@ from adk.models.investigation import (
     AgentMessageType,
 )
 from adk.services.plant_service import PlantService
-from adk.controllers.websocket_controller import (
-    broadcast_ui_summary_update,
-    broadcast_status_update,
-)
+from adk.services.broadcast_service import broadcast_service
 
 logger = logging.getLogger(__name__)
 
@@ -403,6 +400,20 @@ class InvestigationService:
 
                     # Determine final status based on agent response
                     if final_response and len(final_response.strip()) > 10:
+                        # Process the response with UI summary generation
+                        processed_response = (
+                            await self._process_agent_response_with_ui_summary(
+                                final_response
+                            )
+                        )
+
+                        # Store UI summary in session state for frontend
+                        await self._store_ui_summary_in_session(
+                            investigation.id,
+                            processed_response["ui_summary"],
+                            final_response,
+                        )
+
                         # Check if response indicates completion or needs attention
                         response_lower = final_response.lower()
                         if any(
@@ -832,7 +843,9 @@ class InvestigationService:
             )
 
             # Broadcast status update to WebSocket clients
-            await broadcast_status_update(investigation_id, status.value)
+            await broadcast_service.broadcast_status_update(
+                investigation_id, status.value
+            )
 
         except Exception as e:
             logger.error(
@@ -966,7 +979,7 @@ class InvestigationService:
             )
 
             # Broadcast UI summary update to WebSocket clients
-            await broadcast_ui_summary_update(
+            await broadcast_service.broadcast_ui_summary_update(
                 investigation_id, ui_summary, full_content
             )
 
