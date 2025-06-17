@@ -6,9 +6,11 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
+from google.adk.events import Event, EventActions
 from google.genai import types
 import json
 import asyncio
+import time
 
 from adk.agents.solar_investigation_agent import get_solar_investigation_agent
 from adk.config.settings import get_settings
@@ -36,6 +38,7 @@ class InvestigationService:
 
         # Application constants
         self.app_name = "solar_investigation_api"
+        self.default_user_id = "api_user"  # Consistent user ID for all investigations
 
         # Service dependencies
         self.plant_service = PlantService()
@@ -101,7 +104,7 @@ class InvestigationService:
         # Create session in database with investigation metadata
         await self.session_service.create_session(
             app_name=self.app_name,
-            user_id=investigation.user_id,
+            user_id=self.default_user_id,  # Use consistent user ID
             session_id=session_id,
             state=investigation_data,
         )
@@ -118,7 +121,7 @@ class InvestigationService:
             session_id = self._get_session_id(investigation_id)
             session = await self.session_service.get_session(
                 app_name=self.app_name,
-                user_id="api_user",  # Default user for now
+                user_id=self.default_user_id,  # Use consistent user ID
                 session_id=session_id,
             )
 
@@ -250,7 +253,7 @@ class InvestigationService:
             # List all sessions for our app
             sessions_response = await self.session_service.list_sessions(
                 app_name=self.app_name,
-                user_id="api_user",
+                user_id=self.default_user_id,  # Use consistent user ID
             )
 
             investigations = []
@@ -294,8 +297,8 @@ class InvestigationService:
             return []
 
     async def start_investigation(self, request: InvestigationRequest) -> Investigation:
-        """Start running the investigation using Google ADK agent"""
-        # Create investigation
+        """Start a new solar investigation with immediate ADK agent initialization"""
+        # Create the investigation record and session
         investigation = await self._create_investigation(request)
 
         try:
@@ -319,11 +322,130 @@ class InvestigationService:
             plant = await self.plant_service.get_plant_by_id(investigation.plant_id)
             plant_name = plant.plant_name if plant else "Unknown Plant"
 
-            # The initial system message will be automatically stored in the database
-            # when we send it through the runner, so no manual chat history management needed
+            # Create comprehensive initial investigation prompt
+            # TODO: Enhance this template with real plant data and energy consumption patterns
+            initial_prompt = f"""
+Please begin a comprehensive solar installation feasibility investigation for the following solar plant:
+
+PLANT INFORMATION:
+- Plant ID: {investigation.plant_id}
+- Plant Name: {plant_name}
+- Plant Type: {plant.type if plant else "Unknown"}
+- Location: {getattr(plant, 'location', 'Location data unavailable')}
+
+INVESTIGATION SCOPE:
+- Analysis Period: {investigation.start_date.isoformat()} to {investigation.end_date.isoformat()}
+- Duration: {(investigation.end_date - investigation.start_date).days + 1} days
+- Focus: Solar installation feasibility and optimization
+
+ADDITIONAL CONTEXT:
+{investigation.additional_notes or "No additional specifications provided."}
+
+REQUIRED ANALYSIS:
+Please provide a comprehensive solar feasibility assessment that includes:
+
+1. SITE SUITABILITY ANALYSIS
+   - Solar irradiation potential for the specified period
+   - Physical site constraints and opportunities
+   - Environmental factors affecting installation
+
+2. TECHNICAL ASSESSMENT
+   - Estimated solar system size and configuration
+   - Expected energy production potential
+   - Equipment recommendations and specifications
+
+3. FINANCIAL ANALYSIS
+   - Installation cost estimates
+   - Projected energy savings and payback period
+   - Available incentives, rebates, and financing options
+
+4. IMPLEMENTATION ROADMAP
+   - Key milestones and timeline
+   - Permit and regulatory requirements
+   - Risk assessment and mitigation strategies
+
+5. RECOMMENDATIONS
+   - Clear go/no-go recommendation with reasoning
+   - Alternative options or optimizations
+   - Next steps for proceeding
+
+Please start your investigation now and provide your initial findings.
+            """
+
+            # Send initial prompt to agent - ADK will automatically store this conversation
+            user_content = types.Content(
+                role="user", parts=[types.Part(text=initial_prompt)]
+            )
+
+            session_id = self._get_session_id(investigation.id)
+
+            # Process agent response with retry logic
+            max_retries = 1
+            for attempt in range(max_retries + 1):
+                try:
+                    final_response = "No response received"
+                    async for event in runner.run_async(
+                        user_id=self.default_user_id,  # Use consistent user ID
+                        session_id=session_id,
+                        new_message=user_content,
+                    ):
+                        if (
+                            event.is_final_response()
+                            and event.content
+                            and event.content.parts
+                        ):
+                            final_response = (
+                                event.content.parts[0].text or "Empty response"
+                            )
+
+                    # Determine final status based on agent response
+                    if final_response and len(final_response.strip()) > 10:
+                        # Check if response indicates completion or needs attention
+                        response_lower = final_response.lower()
+                        if any(
+                            keyword in response_lower
+                            for keyword in ["complete", "concluded", "final", "summary"]
+                        ):
+                            investigation.status = InvestigationStatus.COMPLETED
+                            await self._update_investigation_status(
+                                investigation.id, InvestigationStatus.COMPLETED
+                            )
+                        else:
+                            # Default to requiring attention for user follow-up
+                            investigation.status = (
+                                InvestigationStatus.REQUIRES_ATTENTION
+                            )
+                            await self._update_investigation_status(
+                                investigation.id, InvestigationStatus.REQUIRES_ATTENTION
+                            )
+                    else:
+                        # Empty or minimal response - requires attention
+                        investigation.status = InvestigationStatus.REQUIRES_ATTENTION
+                        await self._update_investigation_status(
+                            investigation.id, InvestigationStatus.REQUIRES_ATTENTION
+                        )
+
+                    logger.info(
+                        f"Successfully started investigation {investigation.id} with status {investigation.status.value}"
+                    )
+                    break  # Success, exit retry loop
+
+                except Exception as e:
+                    logger.error(
+                        f"Attempt {attempt + 1} failed for investigation {investigation.id}: {e}"
+                    )
+                    if attempt == max_retries:
+                        # Final attempt failed - notify frontend
+                        await self._update_investigation_status(
+                            investigation.id,
+                            InvestigationStatus.FAILED,
+                            error_message=f"Failed to start investigation after {max_retries + 1} attempts: {str(e)}",
+                        )
+                        raise
+                    # Wait before retry
+                    await asyncio.sleep(1)
 
             logger.info(f"Started investigation {investigation.id}")
-            investigation.status = InvestigationStatus.RUNNING
 
         except Exception as e:
             await self._update_investigation_status(
@@ -354,21 +476,9 @@ class InvestigationService:
             self.runners[investigation_id] = runner
 
         try:
-            # Prepare query for agent
-            plant = await self.plant_service.get_plant_by_id(investigation.plant_id)
-            query = {
-                "plant_id": investigation.plant_id,
-                "plant_name": plant.plant_name if plant else "Unknown Plant",
-                "plant_type": plant.type if plant else "Unknown",
-                "start_date": investigation.start_date.isoformat(),
-                "end_date": investigation.end_date.isoformat(),
-                "additional_notes": investigation.additional_notes,
-                "user_message": user_message,
-            }
-
-            # Send to agent - ADK will automatically store messages in database
+            # Send user message directly to agent - ADK will automatically store messages
             user_content = types.Content(
-                role="user", parts=[types.Part(text=json.dumps(query))]
+                role="user", parts=[types.Part(text=user_message)]
             )
 
             final_response = "No response received"
@@ -377,14 +487,14 @@ class InvestigationService:
             )
 
             async for event in runner.run_async(
-                user_id=investigation.user_id,
+                user_id=self.default_user_id,  # Use consistent user ID
                 session_id=session_id,
                 new_message=user_content,
             ):
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or "Empty response"
 
-            # Update investigation timestamp
+            # Update investigation timestamp using proper ADK events
             await self._update_investigation_status(
                 investigation_id, investigation.status
             )
@@ -433,7 +543,7 @@ class InvestigationService:
             session_id = self._get_session_id(investigation_id)
             session = await self.session_service.get_session(
                 app_name=self.app_name,
-                user_id="api_user",
+                user_id=self.default_user_id,  # Use consistent user ID
                 session_id=session_id,
             )
 
@@ -614,7 +724,7 @@ class InvestigationService:
         if not investigation:
             raise ValueError(f"Investigation {investigation_id} not found")
 
-        # The decision will be automatically stored when we send it through the runner
+        # Send decision as user message to ADK
         runner = self.runners.get(investigation_id)
         if runner:
             decision_content = types.Content(
@@ -627,7 +737,7 @@ class InvestigationService:
                 investigation_id
             )
             async for event in runner.run_async(
-                user_id=investigation.user_id,
+                user_id=self.default_user_id,  # Use consistent user ID
                 session_id=session_id,
                 new_message=decision_content,
             ):
@@ -644,30 +754,57 @@ class InvestigationService:
         result: Optional[Dict[str, Any]] = None,
         completed_at: Optional[datetime] = None,
     ) -> None:
-        """Update investigation status in database"""
+        """Update investigation status using proper ADK event handling"""
         try:
             session_id = self._get_session_id(investigation_id)
             session = await self.session_service.get_session(
                 app_name=self.app_name,
-                user_id="api_user",
+                user_id=self.default_user_id,  # Use consistent user ID
                 session_id=session_id,
             )
 
-            if session and session.state.get("investigation"):
-                # Update investigation data in session state
-                inv_data = session.state["investigation"]
-                inv_data["status"] = status.value
-                inv_data["updated_at"] = datetime.now().isoformat()
+            if not session:
+                logger.error(f"Session not found for investigation {investigation_id}")
+                return
 
-                if error_message:
-                    inv_data["error_message"] = error_message
-                if result:
-                    inv_data["result"] = result
-                if completed_at:
-                    inv_data["completed_at"] = completed_at.isoformat()
+            # Create state changes following ADK pattern
+            current_time = time.time()
+            investigation_data = session.state.get("investigation", {})
+            investigation_data["status"] = status.value
+            investigation_data["updated_at"] = datetime.now().isoformat()
 
-                # Update session state - ADK will persist this
-                session.state["investigation"] = inv_data
+            if error_message:
+                investigation_data["error_message"] = error_message
+            if result:
+                investigation_data["result"] = result
+            if completed_at:
+                investigation_data["completed_at"] = completed_at.isoformat()
+
+            state_changes: Dict[str, Any] = {"investigation": investigation_data}
+
+            # Create Event with EventActions for state update
+            actions_with_update = EventActions(state_delta=state_changes)
+            status_event = Event(
+                invocation_id=f"inv_status_update_{investigation_id}",
+                author="system",
+                actions=actions_with_update,
+                timestamp=current_time,
+                content=types.Content(
+                    role="system",
+                    parts=[
+                        types.Part(
+                            text=f"Investigation status updated to {status.value}"
+                        )
+                    ],
+                ),
+            )
+
+            # Apply the event to update state
+            await self.session_service.append_event(session, status_event)
+
+            logger.info(
+                f"Updated investigation {investigation_id} status to {status.value}"
+            )
 
         except Exception as e:
             logger.error(
@@ -680,49 +817,11 @@ class InvestigationService:
         status: InvestigationStatus,
         error_message: Optional[str] = None,
     ) -> bool:
-        """Update the status of an investigation"""
+        """Update the status of an investigation using proper ADK events"""
         try:
-            session_id = self._get_session_id(investigation_id)
-
-            # Get current session
-            session = await self.session_service.get_session(
-                app_name=self.app_name,
-                user_id="api_user",
-                session_id=session_id,
-            )
-
-            if not session or not session.state.get("investigation"):
-                return False
-
-            # Update investigation status in session state
-            investigation_data = session.state.copy()
-            investigation_data["investigation"]["status"] = status.value
-            investigation_data["investigation"][
-                "updated_at"
-            ] = datetime.now().isoformat()
-
-            if error_message:
-                investigation_data["investigation"]["error_message"] = error_message
-
-            if status in [
-                InvestigationStatus.COMPLETED,
-                InvestigationStatus.FAILED,
-                InvestigationStatus.CANCELLED,
-            ]:
-                investigation_data["investigation"][
-                    "completed_at"
-                ] = datetime.now().isoformat()
-
-            # Update session state by recreating session
-            await self.session_service.create_session(
-                app_name=self.app_name,
-                user_id="api_user",
-                session_id=session_id,
-                state=investigation_data,
-            )
-
-            logger.info(
-                f"Updated investigation {investigation_id} status to {status.value}"
+            # Use the internal method that follows ADK patterns
+            await self._update_investigation_status(
+                investigation_id, status, error_message=error_message
             )
             return True
 
@@ -748,7 +847,7 @@ class InvestigationService:
             # Delete session from database
             await self.session_service.delete_session(
                 app_name=self.app_name,
-                user_id="api_user",
+                user_id=self.default_user_id,  # Use consistent user ID
                 session_id=session_id,
             )
 
@@ -764,7 +863,7 @@ class InvestigationService:
         try:
             sessions_response = await self.session_service.list_sessions(
                 app_name=self.app_name,
-                user_id="api_user",
+                user_id=self.default_user_id,  # Use consistent user ID
             )
             return len(sessions_response.sessions)
         except Exception as e:

@@ -41,6 +41,56 @@ uv add google-adk-python
 3. Use `pydantic` for data validation
 4. When encounter with google adk, gemini, or any other agent development, use mcp server to find the documentation
 
+<google-sdk-schema>
+```
+sqlite3 solar_investigation_data.db ".tables"
+app_states events sessions user_states
 
+sqlite3 solar_investigation_data.db ".schema"
+CREATE TABLE sessions (
+app_name VARCHAR(128) NOT NULL,
+user_id VARCHAR(128) NOT NULL,
+id VARCHAR(128) NOT NULL,
+state TEXT NOT NULL,
+create_time DATETIME NOT NULL,
+update_time DATETIME NOT NULL,
+PRIMARY KEY (app_name, user_id, id)
+);
+CREATE TABLE app_states (
+app_name VARCHAR(128) NOT NULL,
+state TEXT NOT NULL,
+update_time DATETIME NOT NULL,
+PRIMARY KEY (app_name)
+);
+CREATE TABLE user_states (
+app_name VARCHAR(128) NOT NULL,
+user_id VARCHAR(128) NOT NULL,
+state TEXT NOT NULL,
+update_time DATETIME NOT NULL,
+PRIMARY KEY (app_name, user_id)
+);
+CREATE TABLE events (
+id VARCHAR(128) NOT NULL,
+app_name VARCHAR(128) NOT NULL,
+user_id VARCHAR(128) NOT NULL,
+session_id VARCHAR(128) NOT NULL,
+invocation_id VARCHAR(256) NOT NULL,
+author VARCHAR(256) NOT NULL,
+branch VARCHAR(256),
+timestamp DATETIME NOT NULL,
+content TEXT,
+actions BLOB NOT NULL,
+long_running_tool_ids_json TEXT,
+grounding_metadata TEXT,
+partial BOOLEAN,
+turn_complete BOOLEAN,
+error_code VARCHAR(256),
+error_message VARCHAR(1024),
+interrupted BOOLEAN,
+PRIMARY KEY (id, app_name, user_id, session_id),
+FOREIGN KEY(app_name, user_id, session_id) REFERENCES sessions (app_name, user_id, id) ON DELETE CASCADE
+);
+```
+</google-sdk-schema>
 ## Angular rules
 1. Use RxJS for state management

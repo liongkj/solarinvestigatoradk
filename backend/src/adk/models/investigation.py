@@ -13,6 +13,7 @@ class InvestigationStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    REQUIRES_ATTENTION = "requires_attention"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
