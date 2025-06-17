@@ -144,56 +144,61 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     private updateProgressSteps(): void {
         if (!this.investigation) return;
 
-        // Reset progress
-        this.progressSteps.forEach(step => step.completed = false);
+        // First try to use rich ADK agent stats
+        this.updateProgressStepsFromAgentStats();
 
-        // Update based on investigation status and messages
-        const status = this.investigation.status;
-        const createdAt = this.investigation.created_at;
+        // If no agent stats available, fall back to message-based heuristics
+        if (!this.investigation.agent_stats || this.investigation.agent_stats.total_events === 0) {
+            // Reset progress
+            this.progressSteps.forEach(step => step.completed = false);
 
-        // Step 1: Always completed if investigation exists
-        this.progressSteps[0].completed = true;
-        this.progressSteps[0].timestamp = createdAt;
+            // Update based on investigation status and messages
+            const status = this.investigation.status;
+            const createdAt = this.investigation.created_at;
 
-        // Check message history for agent activity
-        // Note: AgentMessage doesn't have agent_name, so we'll use content/metadata for detection
-        const hasDataAgentMessages = this.chatMessages.some(msg =>
-            msg.content?.toLowerCase().includes('data') ||
-            msg.metadata?.['agent_name']?.toLowerCase().includes('data') ||
-            msg.message_type === AgentMessageType.AGENT
-        );
+            // Step 1: Always completed if investigation exists
+            this.progressSteps[0].completed = true;
+            this.progressSteps[0].timestamp = createdAt;
 
-        const hasAlertAgentMessages = this.chatMessages.some(msg =>
-            msg.content?.toLowerCase().includes('alert') ||
-            msg.metadata?.['agent_name']?.toLowerCase().includes('alert') ||
-            msg.message_type === AgentMessageType.AGENT
-        );
+            // Check message history for agent activity
+            const hasDataAgentMessages = this.chatMessages.some(msg =>
+                msg.content?.toLowerCase().includes('data') ||
+                msg.metadata?.['agent_name']?.toLowerCase().includes('data') ||
+                msg.message_type === AgentMessageType.AGENT
+            );
 
-        const hasCoordinatorMessages = this.chatMessages.some(msg =>
-            msg.content?.toLowerCase().includes('coordinator') ||
-            msg.metadata?.['agent_name']?.toLowerCase().includes('coordinator') ||
-            msg.message_type === AgentMessageType.SYSTEM
-        );
+            const hasAlertAgentMessages = this.chatMessages.some(msg =>
+                msg.content?.toLowerCase().includes('alert') ||
+                msg.metadata?.['agent_name']?.toLowerCase().includes('alert') ||
+                msg.message_type === AgentMessageType.AGENT
+            );
 
-        if (hasDataAgentMessages) {
-            this.progressSteps[1].completed = true;
-            this.progressSteps[1].timestamp = this.getEarliestMessageTime('data');
-        }
+            const hasCoordinatorMessages = this.chatMessages.some(msg =>
+                msg.content?.toLowerCase().includes('coordinator') ||
+                msg.metadata?.['agent_name']?.toLowerCase().includes('coordinator') ||
+                msg.message_type === AgentMessageType.SYSTEM
+            );
 
-        if (hasAlertAgentMessages) {
-            this.progressSteps[2].completed = true;
-            this.progressSteps[2].timestamp = this.getEarliestMessageTime('alert');
-        }
+            if (hasDataAgentMessages) {
+                this.progressSteps[1].completed = true;
+                this.progressSteps[1].timestamp = this.getEarliestMessageTime('data');
+            }
 
-        if (hasCoordinatorMessages) {
-            this.progressSteps[3].completed = true;
-            this.progressSteps[3].timestamp = this.getEarliestMessageTime('coordinator');
-        }
+            if (hasAlertAgentMessages) {
+                this.progressSteps[2].completed = true;
+                this.progressSteps[2].timestamp = this.getEarliestMessageTime('alert');
+            }
 
-        // Final step based on status
-        if (status === InvestigationStatus.COMPLETED || status === InvestigationStatus.FAILED) {
-            this.progressSteps[4].completed = true;
-            this.progressSteps[4].timestamp = this.investigation.completed_at || new Date().toISOString();
+            if (hasCoordinatorMessages) {
+                this.progressSteps[3].completed = true;
+                this.progressSteps[3].timestamp = this.getEarliestMessageTime('coordinator');
+            }
+
+            // Final step based on status
+            if (status === InvestigationStatus.COMPLETED || status === InvestigationStatus.FAILED) {
+                this.progressSteps[4].completed = true;
+                this.progressSteps[4].timestamp = this.investigation.completed_at || new Date().toISOString();
+            }
         }
     }
 
@@ -325,6 +330,80 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     hasExtraMetadata(metadata: any): boolean {
         return metadata && Object.keys(metadata).length > 1;
+    }
+
+    // Helper methods for agent stats
+    getAgentStatsData() {
+        return this.investigation?.agent_stats || {
+            total_events: 0,
+            user_messages: 0,
+            agent_responses: 0,
+            thinking_steps: 0,
+            tool_calls: 0,
+            tools_used: [],
+            total_agents: [],
+            progress_steps: []
+        };
+    }
+
+    hasAgentActivity(): boolean {
+        const stats = this.getAgentStatsData();
+        return stats.total_events > 0 || this.chatMessages.length > 0;
+    }
+
+    getAgentActivitySummary(): string {
+        const stats = this.getAgentStatsData();
+        if (!this.hasAgentActivity()) {
+            return 'No agent activity yet';
+        }
+
+        const parts = [];
+        if (stats.agent_responses > 0) parts.push(`${stats.agent_responses} responses`);
+        if (stats.thinking_steps > 0) parts.push(`${stats.thinking_steps} thinking steps`);
+        if (stats.tool_calls > 0) parts.push(`${stats.tool_calls} tool calls`);
+        if (stats.total_agents.length > 0) parts.push(`${stats.total_agents.length} agents active`);
+
+        return parts.join(', ');
+    }
+
+    private updateProgressStepsFromAgentStats(): void {
+        if (!this.investigation?.agent_stats) return;
+
+        const stats = this.investigation.agent_stats;
+
+        // Update progress based on rich ADK agent stats
+        if (stats.progress_steps && stats.progress_steps.length > 0) {
+            // Use ADK progress steps if available
+            this.progressSteps = stats.progress_steps.map((step, index) => ({
+                name: step.step_name,
+                completed: step.completed,
+                timestamp: step.timestamp
+            }));
+        } else {
+            // Fallback to heuristic-based progress
+            this.progressSteps[0].completed = true;
+            this.progressSteps[0].timestamp = this.investigation.created_at;
+
+            if (stats.agent_responses > 0) {
+                this.progressSteps[1].completed = true;
+                this.progressSteps[1].timestamp = stats.last_activity || null;
+            }
+
+            if (stats.tool_calls > 0) {
+                this.progressSteps[2].completed = true;
+                this.progressSteps[2].timestamp = stats.last_activity || null;
+            }
+
+            if (stats.total_agents.length > 1) {
+                this.progressSteps[3].completed = true;
+                this.progressSteps[3].timestamp = stats.last_activity || null;
+            }
+
+            if (this.investigation.status === InvestigationStatus.COMPLETED) {
+                this.progressSteps[4].completed = true;
+                this.progressSteps[4].timestamp = this.investigation.completed_at || null;
+            }
+        }
     }
 
     // Make Object available in template

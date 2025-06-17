@@ -34,6 +34,7 @@ export interface InvestigationRequest {
     start_date: string; // ISO date string (YYYY-MM-DD)
     end_date: string; // ISO date string (YYYY-MM-DD)
     additional_notes?: string;
+    parent_id?: string; // ID of parent investigation if this is a retry
 }
 
 export interface Investigation {
@@ -46,11 +47,29 @@ export interface Investigation {
     status: InvestigationStatus;
     session_id?: string;
     user_id: string;
+    parent_id?: string; // ID of parent investigation if this is a retry
     created_at: string; // ISO string from backend
     updated_at: string; // ISO string from backend
     completed_at?: string;
     result?: { [key: string]: any };
     error_message?: string;
+    agent_stats?: { // Rich ADK agent interaction statistics
+        total_events: number;
+        user_messages: number;
+        agent_responses: number;
+        thinking_steps: number;
+        tool_calls: number;
+        tools_used: string[];
+        total_agents: string[];
+        session_duration?: number;
+        last_activity?: string;
+        progress_steps: Array<{
+            step_number: number;
+            step_name: string;
+            timestamp: string;
+            completed: boolean;
+        }>;
+    };
 }
 
 export interface InvestigationResponse {

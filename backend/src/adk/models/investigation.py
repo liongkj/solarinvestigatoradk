@@ -51,6 +51,9 @@ class InvestigationRequest(BaseModel):
     additional_notes: Optional[str] = Field(
         None, description="Additional notes or requirements"
     )
+    parent_id: Optional[str] = Field(
+        None, description="ID of parent investigation if this is a retry"
+    )
 
 
 class Investigation(BaseModel):
@@ -64,11 +67,13 @@ class Investigation(BaseModel):
     status: InvestigationStatus = InvestigationStatus.PENDING
     session_id: Optional[str] = None
     user_id: str = "api_user"
+    parent_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
     result: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
+    agent_stats: Optional[Dict[str, Any]] = None  # Rich ADK agent interaction stats
 
     class Config:
         json_encoders = {

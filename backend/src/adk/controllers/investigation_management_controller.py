@@ -354,6 +354,110 @@ async def simulate_agent_thinking(
         )
 
 
+@router.post("/{investigation_id}/retry", response_model=InvestigationResponse)
+async def retry_investigation(
+    investigation_id: str,
+    investigation_service: InvestigationService = Depends(InvestigationService),
+):
+    """
+    Retry a failed or cancelled investigation.
+
+    Marks the original investigation as FAILED and creates a new investigation
+    with the same parameters but linked as a retry.
+    """
+    try:
+        # Get the original investigation
+        original_investigation = await investigation_service.get_investigation(
+            investigation_id
+        )
+        if not original_investigation:
+            raise HTTPException(
+                status_code=404, detail=f"Investigation {investigation_id} not found"
+            )
+
+        # Mark original investigation as failed
+        success = await investigation_service.update_investigation_status(
+            investigation_id,
+            InvestigationStatus.FAILED,
+            "Marked as failed due to retry",
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update original investigation status",
+            )
+
+        # Create retry request with same parameters
+        retry_request = InvestigationRequest(
+            plant_id=original_investigation.plant_id,
+            start_date=original_investigation.start_date,
+            end_date=original_investigation.end_date,
+            additional_notes=original_investigation.additional_notes,
+            parent_id=investigation_id,  # Link to original investigation
+        )
+
+        # Start the retry investigation
+        retry_investigation = await investigation_service.start_investigation(
+            retry_request
+        )
+
+        return InvestigationResponse(
+            investigation=retry_investigation,
+            message=f"Investigation retried successfully. Original investigation {investigation_id} marked as failed.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrying investigation {investigation_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retry investigation: {str(e)}"
+        )
+
+
+@router.delete("/{investigation_id}")
+async def delete_investigation(
+    investigation_id: str,
+    investigation_service: InvestigationService = Depends(InvestigationService),
+):
+    """
+    Delete a specific investigation by ID.
+
+    Removes the investigation and all associated session data.
+    If the investigation is running, it will be stopped first.
+    """
+    try:
+        # Check if investigation exists
+        investigation = await investigation_service.get_investigation(investigation_id)
+        if not investigation:
+            raise HTTPException(
+                status_code=404, detail=f"Investigation {investigation_id} not found"
+            )
+
+        # Delete the investigation
+        success = await investigation_service.delete_investigation(investigation_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to delete investigation {investigation_id}",
+            )
+
+        return {
+            "success": True,
+            "message": f"Investigation {investigation_id} deleted successfully",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting investigation {investigation_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete investigation: {str(e)}"
+        )
+
+
 # Health check endpoint specifically for investigation service
 @router.get("/health/service")
 async def investigation_service_health(

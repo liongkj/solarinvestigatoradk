@@ -468,20 +468,113 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
     }
 
-    // Plant management methods
-    // private loadPlants() {
-    //     this.plants$ = this.plantService.getPlants().pipe(
-    //         take(1),
-    //         tap(plants => {
-    //             this.plants$.next(plants);
-    //         }),
-    //         catchError(error => {
-    //             console.error('Error loading plants:', error);
-    //             this.error = 'Failed to load plants';
-    //             return of([]);
-    //         })
-    //     ).subscribe();
-    // }
+    retryInvestigation(investigation: Investigation, event?: Event) {
+        if (event) {
+            event.stopPropagation();
+        }
+
+        // Show confirmation dialog
+        const confirmRetry = confirm(
+            `Are you sure you want to retry this investigation?\n\n` +
+            `Plant: ${investigation.plant_name || 'Plant ID: ' + investigation.plant_id.substring(0, 8) + '...'}\n` +
+            `Date Range: ${investigation.start_date} to ${investigation.end_date}\n` +
+            `Previous Status: ${investigation.status}\n\n` +
+            `This will mark the current investigation as failed and create a new linked investigation.`
+        );
+
+        if (!confirmRetry) {
+            return;
+        }
+
+        this.isLoading = true;
+        this.error = null;
+
+        this.investigationService.retryInvestigation(investigation.id).pipe(
+            takeUntil(this.destroy$),
+            tap(response => {
+                if (response) {
+                    // Add plant name to new investigation for display
+                    const plant = this.plants.find(p => p.plant_id === response.investigation.plant_id);
+                    if (plant) {
+                        response.investigation.plant_name = plant.plant_name;
+                    }
+
+                    // Update the original investigation status in the list
+                    const originalIndex = this.investigations.findIndex(inv => inv.id === investigation.id);
+                    if (originalIndex >= 0) {
+                        this.investigations[originalIndex].status = InvestigationStatus.FAILED;
+                        this.investigations[originalIndex].error_message = "Marked as failed due to retry";
+                    }
+
+                    // Add new investigation to the list and select it
+                    this.investigations.unshift(response.investigation);
+                    this.selectedInvestigation = response.investigation;
+
+                    // Load chat messages for the new investigation
+                    this.loadChatMessages();
+
+                    console.log('Investigation retried successfully');
+                }
+            }),
+            catchError(error => {
+                this.error = `Failed to retry investigation: ${error.message}`;
+                console.error('Error retrying investigation:', error);
+                return of(null);
+            }),
+            finalize(() => {
+                this.isLoading = false;
+            })
+        ).subscribe();
+    }
+
+    deleteInvestigation(investigation: Investigation, event?: Event) {
+        if (event) {
+            event.stopPropagation();
+        }
+
+        // Show confirmation dialog
+        const confirmDelete = confirm(
+            `Are you sure you want to delete this investigation?\n\n` +
+            `Plant: ${investigation.plant_name || 'Plant ID: ' + investigation.plant_id.substring(0, 8) + '...'}\n` +
+            `Date Range: ${this.formatDate(investigation.created_at)}\n` +
+            `Status: ${investigation.status}\n\n` +
+            `This action cannot be undone.`
+        );
+
+        if (!confirmDelete) {
+            return;
+        }
+
+        this.isLoading = true;
+        this.error = null;
+
+        this.investigationService.deleteInvestigation(investigation.id)
+            .pipe(
+                takeUntil(this.destroy$),
+                catchError(error => {
+                    this.error = `Failed to delete investigation: ${error.message}`;
+                    console.error('Error deleting investigation:', error);
+                    return of(null);
+                }),
+                finalize(() => {
+                    this.isLoading = false;
+                })
+            )
+            .subscribe(response => {
+                if (response?.success) {
+                    // Remove from local array
+                    this.investigations = this.investigations.filter(inv => inv.id !== investigation.id);
+
+                    // If we deleted the selected investigation, clear selection
+                    if (this.selectedInvestigation?.id === investigation.id) {
+                        this.selectedInvestigation = null;
+                        this.chatMessages = [];
+                    }
+
+                    console.log('Investigation deleted successfully');
+                }
+            });
+    }
 
     // Date helper methods
     calculateDaysBetween(startDate: NgbDate, endDate: NgbDate): number {

@@ -150,6 +150,78 @@
                         </div>
                     </div>
 
+                    <!-- Agent Stats Card -->
+                    <div class="card mb-4" *ngIf="hasAgentActivity()">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-chart-line me-2"></i>
+                                Agent Activity Statistics
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <div class="stat-item text-center">
+                                        <div class="stat-number text-primary">{{ getAgentStatsData().total_events }}
+                                        </div>
+                                        <div class="stat-label text-muted">Total Events</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="stat-item text-center">
+                                        <div class="stat-number text-info">{{ getAgentStatsData().agent_responses }}
+                                        </div>
+                                        <div class="stat-label text-muted">Agent Responses</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="stat-item text-center">
+                                        <div class="stat-number text-warning">{{ getAgentStatsData().thinking_steps }}
+                                        </div>
+                                        <div class="stat-label text-muted">Thinking Steps</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="stat-item text-center">
+                                        <div class="stat-number text-success">{{ getAgentStatsData().tool_calls }}</div>
+                                        <div class="stat-label text-muted">Tool Calls</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mt-3"
+                                *ngIf="getAgentStatsData().tools_used.length > 0 || getAgentStatsData().total_agents.length > 0">
+                                <div class="col-md-6" *ngIf="getAgentStatsData().tools_used.length > 0">
+                                    <h6 class="text-muted mb-2">
+                                        <i class="fas fa-tools me-1"></i>
+                                        Tools Used
+                                    </h6>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <span *ngFor="let tool of getAgentStatsData().tools_used"
+                                            class="badge bg-secondary">{{ tool }}</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6" *ngIf="getAgentStatsData().total_agents.length > 0">
+                                    <h6 class="text-muted mb-2">
+                                        <i class="fas fa-users me-1"></i>
+                                        Active Agents
+                                    </h6>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <span *ngFor="let agent of getAgentStatsData().total_agents"
+                                            class="badge bg-primary">{{ agent }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-3" *ngIf="getAgentStatsData().session_duration">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    Session Duration: {{ getAgentStatsData().session_duration }}s
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Agent Chat Messages -->
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
@@ -178,7 +250,12 @@
                             <div class="chat-container" style="height: 500px; overflow-y: auto;">
                                 <div *ngIf="getVisibleMessages().length === 0" class="text-center py-5 text-muted">
                                     <i class="fas fa-robot fa-3x mb-3"></i>
-                                    <p>No agent messages yet. Agents will start communicating soon...</p>
+                                    <p *ngIf="!hasAgentActivity()">No agent messages yet. Agents will start
+                                        communicating soon...</p>
+                                    <p *ngIf="hasAgentActivity()">
+                                        Agent activity detected: {{ getAgentActivitySummary() }}<br>
+                                        <small>Processing agent messages...</small>
+                                    </p>
                                 </div>
 
                                 <div *ngFor="let message of getVisibleMessages()" class="chat-message mb-3">

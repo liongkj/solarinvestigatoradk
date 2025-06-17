@@ -82,15 +82,23 @@
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <h5 class="card-title">{{ getInvestigationTitle(investigation) }}</h5>
-                                    <span [class]="'badge ' + getStatusColor(investigation.status)">
-                                        {{ investigation.status | titlecase }}
-                                    </span>
+                                    <div class="d-flex flex-column align-items-end">
+                                        <span [class]="'badge ' + getStatusColor(investigation.status)">
+                                            {{ investigation.status | titlecase }}
+                                        </span>
+                                        <small *ngIf="investigation.parent_id" class="text-warning mt-1">
+                                            🔄 Retry
+                                        </small>
+                                    </div>
                                 </div>
 
                                 <div class="text-muted small mb-3">
                                     <p class="mb-1">Started: {{ formatDate(investigation.created_at) }}</p>
                                     <p class="mb-1">Plant: {{ investigation.plant_name || 'Plant ID: ' +
                                         investigation.plant_id.substring(0, 8) + '...' }}</p>
+                                    <p *ngIf="investigation.parent_id" class="mb-1 text-warning">
+                                        🔄 Retry of: {{ investigation.parent_id.substring(0, 8) }}...
+                                    </p>
                                 </div>
 
                                 <!-- Progress Bar for Running Investigations -->
@@ -109,10 +117,22 @@
                                     <small class="text-muted">
                                         Click card or button to view details
                                     </small>
-                                    <button (click)="selectInvestigation(investigation); $event.stopPropagation()"
-                                        class="btn btn-sm btn-outline-primary">
-                                        View Details
-                                    </button>
+                                    <div class="btn-group">
+                                        <button (click)="selectInvestigation(investigation); $event.stopPropagation()"
+                                            class="btn btn-sm btn-outline-primary">
+                                            View Details
+                                        </button>
+                                        <button (click)="retryInvestigation(investigation, $event)"
+                                            class="btn btn-sm btn-outline-warning" title="Retry Investigation"
+                                            [disabled]="isLoading">
+                                            🔄
+                                        </button>
+                                        <button (click)="deleteInvestigation(investigation, $event)"
+                                            class="btn btn-sm btn-outline-danger" title="Delete Investigation"
+                                            [disabled]="isLoading">
+                                            🗑️
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

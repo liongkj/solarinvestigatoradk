@@ -88,6 +88,26 @@ export class InvestigationService {
     }
 
     /**
+     * Retry a failed investigation
+     */
+    retryInvestigation(id: string): Observable<InvestigationResponse> {
+        return this.http.post<InvestigationResponse>(`${this.baseUrl}${id}/retry`, {})
+            .pipe(
+                catchError(this.handleError)
+            );
+    }
+
+    /**
+     * Delete an investigation by ID
+     */
+    deleteInvestigation(id: string): Observable<{ success: boolean, message: string }> {
+        return this.http.delete<{ success: boolean, message: string }>(`${this.baseUrl}${id}`)
+            .pipe(
+                catchError(this.handleError)
+            );
+    }
+
+    /**
      * Get service health status
      */
     getHealthStatus(): Observable<HealthResponse> {
