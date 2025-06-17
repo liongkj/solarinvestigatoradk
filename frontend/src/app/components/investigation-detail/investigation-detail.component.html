@@ -230,6 +230,17 @@
                                 Agent Communication
                             </h5>
                             <div class="d-flex align-items-center gap-3">
+                                <!-- UI Summary Toggle -->
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="showUiSummaries"
+                                        [(ngModel)]="showUiSummaries" (change)="toggleUiSummaryMode()">
+                                    <label class="form-check-label text-muted" for="showUiSummaries">
+                                        <small>
+                                            <i class="fas fa-compress-alt me-1"></i>
+                                            Summary view
+                                        </small>
+                                    </label>
+                                </div>
                                 <!-- Show All Thoughts Toggle -->
                                 <div class="form-check form-switch" *ngIf="getDetailedThoughtsCount() > 0">
                                     <input class="form-check-input" type="checkbox" id="showAllThoughts"
@@ -242,7 +253,8 @@
                                     </label>
                                 </div>
                                 <small class="text-muted">
-                                    Auto-refreshing every 3 seconds
+                                    <i class="fas fa-wifi me-1"></i>
+                                    Real-time updates
                                 </small>
                             </div>
                         </div>
@@ -306,14 +318,41 @@
                                                     <div class="message-sender fw-bold">
                                                         {{ message.metadata?.['agent_name'] || message.message_type |
                                                         titlecase }}
+                                                        <!-- UI Summary indicator -->
+                                                        <span *ngIf="message.ui_summary && showUiSummaries"
+                                                            class="badge bg-info ms-2">
+                                                            <i class="fas fa-compress-alt"></i> Summary
+                                                        </span>
                                                     </div>
                                                     <div class="message-time text-muted">
                                                         <small>{{ formatTimestamp(message.timestamp) }}</small>
                                                     </div>
                                                 </div>
+
+                                                <!-- Message content with UI summary support -->
                                                 <div class="message-text mt-1">
-                                                    {{ message.content }}
+                                                    <div
+                                                        [ngClass]="{'ui-summary-text': showUiSummaries && message.ui_summary && message.message_type === 'agent'}">
+                                                        {{ getDisplayContent(message) }}
+                                                    </div>
+
+                                                    <!-- Expand button for UI summaries -->
+                                                    <button *ngIf="shouldShowExpandButton(message)"
+                                                        class="btn btn-sm btn-outline-secondary mt-2"
+                                                        (click)="message.show_full_content = !message.show_full_content">
+                                                        <i class="fas" [class.fa-expand]="!message.show_full_content"
+                                                            [class.fa-compress]="message.show_full_content"></i>
+                                                        {{ message.show_full_content ? 'Show Summary' : 'Show Full
+                                                        Response' }}
+                                                    </button>
+
+                                                    <!-- Full content when expanded -->
+                                                    <div *ngIf="message.show_full_content && message.ui_summary"
+                                                        class="full-content mt-2 p-3 bg-light rounded">
+                                                        {{ message.content }}
+                                                    </div>
                                                 </div>
+
                                                 <div *ngIf="hasExtraMetadata(message.metadata)"
                                                     class="message-metadata mt-2">
                                                     <small class="text-muted">

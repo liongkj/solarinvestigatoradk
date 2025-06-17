@@ -30,14 +30,25 @@ class AgentMessageType(str, Enum):
 
 
 class AgentMessage(BaseModel):
-    """Agent message model for chat history"""
+    """Agent message model for chat history with UI state support"""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     investigation_id: str
     message_type: AgentMessageType
-    content: str
+    content: str  # Full content
     metadata: Optional[Dict[str, Any]] = None
     timestamp: datetime = Field(default_factory=datetime.now)
+
+    # UI State fields for frontend display
+    ui_summary: Optional[str] = Field(
+        None, description="10-word UI summary for display"
+    )
+    ui_state: Optional[Dict[str, Any]] = Field(
+        None, description="UI-specific state data"
+    )
+    show_full_content: bool = Field(
+        False, description="Whether to show full content by default"
+    )
 
     class Config:
         json_encoders = {datetime: lambda v: v.isoformat()}

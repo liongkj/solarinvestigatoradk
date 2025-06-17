@@ -478,3 +478,42 @@ async def investigation_service_health(
         raise HTTPException(
             status_code=503, detail=f"Investigation service unhealthy: {str(e)}"
         )
+
+
+@router.get("/{investigation_id}/ui-summary")
+async def get_investigation_ui_summary(
+    investigation_id: str,
+    investigation_service: InvestigationService = Depends(InvestigationService),
+):
+    """
+    Get UI summary for an investigation.
+
+    Returns the latest UI summary and full content for the investigation.
+    """
+    try:
+        # Get session to access UI state
+        session_id = investigation_service._get_session_id(investigation_id)
+        session = await investigation_service.session_service.get_session(
+            app_name=investigation_service.app_name,
+            user_id=investigation_service.default_user_id,
+            session_id=session_id,
+        )
+
+        if not session:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        ui_state = session.state.get("ui_state", {})
+
+        return {
+            "investigation_id": investigation_id,
+            "ui_summary": ui_state.get("latest_ui_summary", "No summary available"),
+            "full_content": ui_state.get("latest_full_content", "No content available"),
+            "last_update": ui_state.get("last_summary_update"),
+            "has_ui_data": bool(ui_state.get("latest_ui_summary")),
+        }
+
+    except Exception as e:
+        logger.error(
+            f"Error getting UI summary for investigation {investigation_id}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Failed to get UI summary")

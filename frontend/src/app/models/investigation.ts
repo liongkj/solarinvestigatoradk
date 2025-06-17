@@ -27,6 +27,11 @@ export interface AgentMessage {
     content: string;
     metadata?: { [key: string]: any };
     timestamp: string; // ISO string from backend
+
+    // UI State fields
+    ui_summary?: string; // 10-word UI summary for display
+    ui_state?: { [key: string]: any }; // UI-specific state data
+    show_full_content?: boolean; // Whether to show full content by default
 }
 
 export interface InvestigationRequest {

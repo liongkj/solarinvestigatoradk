@@ -2,9 +2,8 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { interval, Subscription, Subject } from 'rxjs';
+import { interval, Subscription, Subject, of } from 'rxjs';
 import { takeUntil, switchMap, catchError, finalize } from 'rxjs/operators';
-import { of } from 'rxjs';
 import { InvestigationService } from '../../services/investigation.service';
 import { Investigation, AgentMessage, InvestigationStatus, AgentMessageType } from '../../models/investigation';
 
@@ -42,6 +41,13 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         { name: 'Investigation Complete', completed: false, timestamp: null }
     ];
 
+    // UI Summary support
+    showUiSummaries = true; // Toggle between summary and full content
+    uiSummaryCache: Map<string, string> = new Map(); // Cache for UI summaries
+
+    // WebSocket connection for real-time updates
+    private websocket: WebSocket | null = null;
+
     constructor(
         private route: ActivatedRoute,
         private router: Router,
@@ -62,12 +68,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
         this.loadInvestigationDetails();
         this.startAutoRefresh();
+        this.setupWebSocket();
     }
 
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
         this.stopAutoRefresh();
+        this.closeWebSocket();
     }
 
     loadInvestigationDetails(): void {
@@ -404,6 +412,144 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 this.progressSteps[4].timestamp = this.investigation.completed_at || null;
             }
         }
+    }
+
+    // WebSocket setup
+    private setupWebSocket(): void {
+        if (this.investigationId) {
+            this.connectWebSocket();
+        }
+    }
+
+    private connectWebSocket(): void {
+        if (!this.investigationId) return;
+
+        const wsUrl = `ws://localhost:8000/ws/investigations/${this.investigationId}`;
+        this.websocket = new WebSocket(wsUrl);
+
+        this.websocket.onopen = () => {
+            console.log('WebSocket connected for investigation:', this.investigationId);
+        };
+
+        this.websocket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                this.handleWebSocketMessage(message);
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+
+        this.websocket.onclose = () => {
+            console.log('WebSocket connection closed');
+            // Attempt to reconnect after 3 seconds
+            setTimeout(() => {
+                if (!this.destroy$.closed) {
+                    this.connectWebSocket();
+                }
+            }, 3000);
+        };
+
+        this.websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+    }
+
+    private subscribeToInvestigationUpdates(): void {
+        if (!this.websocket || !this.investigationId) return;
+
+        const payload = {
+            action: 'subscribe',
+            investigationId: this.investigationId
+        };
+
+        this.websocket.send(JSON.stringify(payload));
+    }
+
+    private handleWebSocketMessage(data: string): void {
+        // Handle incoming WebSocket messages
+        const message = JSON.parse(data);
+
+        switch (message.type) {
+            case 'investigation_update':
+                this.handleInvestigationUpdate(message.payload);
+                break;
+            case 'chat_message':
+                this.handleChatMessage(message.payload);
+                break;
+            case 'ui_summary_update':
+                this.handleUiSummaryUpdate(message.data);
+                break;
+            case 'investigation_status':
+                this.handleStatusUpdate(message.data);
+                break;
+            case 'new_message':
+                this.handleNewMessage(message.data);
+                break;
+            default:
+                console.warn('Unknown message type:', message.type);
+        }
+    }
+
+    private handleInvestigationUpdate(payload: any): void {
+        console.log('Investigation update received:', payload);
+        // Update investigation details
+        this.investigation = { ...this.investigation, ...payload };
+        this.updateProgressSteps();
+    }
+
+    private handleChatMessage(payload: any): void {
+        console.log('Chat message received:', payload);
+        // Add new message to chat history
+        this.chatMessages.push(payload);
+    }
+
+    private handleUiSummaryUpdate(data: any): void {
+        console.log('UI Summary update received:', data);
+        if (data.ui_summary) {
+            // Update the latest message with UI summary if it's an agent message
+            const latestMessage = this.chatMessages[this.chatMessages.length - 1];
+            if (latestMessage && latestMessage.message_type === 'agent') {
+                latestMessage.ui_summary = data.ui_summary;
+            }
+        }
+    }
+
+    private handleStatusUpdate(data: any): void {
+        console.log('Status update received:', data);
+        if (this.investigation && data.status) {
+            this.investigation.status = data.status;
+            this.updateProgressSteps();
+        }
+    }
+
+    private handleNewMessage(data: any): void {
+        console.log('New message received:', data);
+        if (data.message) {
+            this.chatMessages.push(data.message);
+        }
+    }
+
+    private closeWebSocket(): void {
+        if (this.websocket) {
+            this.websocket.close();
+            this.websocket = null;
+        }
+    }
+
+    toggleUiSummaryMode(): void {
+        this.showUiSummaries = !this.showUiSummaries;
+    }
+
+    getDisplayContent(message: AgentMessage): string {
+        if (this.showUiSummaries && message.ui_summary && message.message_type === 'agent') {
+            return message.ui_summary;
+        }
+        return message.content;
+    }
+
+    shouldShowExpandButton(message: AgentMessage): boolean {
+        return this.showUiSummaries && !!message.ui_summary && message.message_type === 'agent';
     }
 
     // Make Object available in template

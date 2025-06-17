@@ -13,6 +13,7 @@ import asyncio
 import time
 
 from adk.agents.solar_investigation_agent import get_solar_investigation_agent
+from adk.agents.ui_summarizer_agent import generate_ui_summary
 from adk.config.settings import get_settings
 from adk.models.investigation import (
     Investigation,
@@ -22,6 +23,10 @@ from adk.models.investigation import (
     AgentMessageType,
 )
 from adk.services.plant_service import PlantService
+from adk.controllers.websocket_controller import (
+    broadcast_ui_summary_update,
+    broadcast_status_update,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -492,6 +497,16 @@ class InvestigationService:
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or "Empty response"
 
+            # Process response with UI summary generation
+            processed_response = await self._process_agent_response_with_ui_summary(
+                final_response
+            )
+
+            # Store UI summary in session state for frontend
+            await self._store_ui_summary_in_session(
+                investigation_id, processed_response["ui_summary"], final_response
+            )
+
             # Update investigation timestamp using proper ADK events
             await self._update_investigation_status(
                 investigation_id, investigation.status
@@ -580,6 +595,15 @@ class InvestigationService:
                     "state_delta": event_metadata.get("state_delta", {}),
                 }
 
+                # Generate UI summary for agent responses
+                ui_summary = None
+                if message_type == AgentMessageType.AGENT and content:
+                    try:
+                        ui_summary = await generate_ui_summary(content)
+                    except Exception as e:
+                        logger.warning(f"Failed to generate UI summary: {e}")
+                        ui_summary = "Agent response"
+
                 message = AgentMessage(
                     id=f"{event.id}_{len(messages)}",  # Ensure unique IDs
                     investigation_id=investigation_id,
@@ -591,6 +615,9 @@ class InvestigationService:
                         if isinstance(event.timestamp, (int, float))
                         else datetime.now()
                     ),
+                    ui_summary=ui_summary,  # Generated summary for UI
+                    ui_state=None,  # Additional UI state if needed
+                    show_full_content=False,  # Default to showing summary
                 )
                 messages.append(message)
 
@@ -804,6 +831,9 @@ class InvestigationService:
                 f"Updated investigation {investigation_id} status to {status.value}"
             )
 
+            # Broadcast status update to WebSocket clients
+            await broadcast_status_update(investigation_id, status.value)
+
         except Exception as e:
             logger.error(
                 f"Error updating investigation status for {investigation_id}: {e}"
@@ -867,3 +897,78 @@ class InvestigationService:
         except Exception as e:
             logger.error(f"Error getting investigations count: {e}")
             return 0
+
+    async def _process_agent_response_with_ui_summary(
+        self, content: str
+    ) -> Dict[str, str]:
+        """Process agent response and generate UI summary"""
+        try:
+            # Generate UI summary using the summarizer agent
+            ui_summary = await generate_ui_summary(content)
+
+            return {"full_content": content, "ui_summary": ui_summary}
+        except Exception as e:
+            logger.error(f"Error generating UI summary: {e}")
+            return {
+                "full_content": content,
+                "ui_summary": "Response processing completed",  # Fallback
+            }
+
+    async def _store_ui_summary_in_session(
+        self, investigation_id: str, ui_summary: str, full_content: str
+    ) -> None:
+        """Store UI summary in session state for frontend access"""
+        try:
+            session_id = self._get_session_id(investigation_id)
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id=self.default_user_id,
+                session_id=session_id,
+            )
+
+            if not session:
+                logger.error(f"Session not found for investigation {investigation_id}")
+                return
+
+            # Create state changes to include UI summary
+            current_time = time.time()
+            ui_state_data = session.state.get("ui_state", {})
+
+            # Add latest response summary
+            ui_state_data.update(
+                {
+                    "latest_ui_summary": ui_summary,
+                    "latest_full_content": full_content,
+                    "last_summary_update": current_time,
+                }
+            )
+
+            state_changes: Dict[str, Any] = {"ui_state": ui_state_data}
+
+            # Create Event with EventActions for UI state update
+            actions_with_update = EventActions(state_delta=state_changes)
+            ui_event = Event(
+                invocation_id=f"ui_summary_update_{investigation_id}",
+                author="system",
+                actions=actions_with_update,
+                timestamp=current_time,
+                content=types.Content(
+                    role="system",
+                    parts=[types.Part(text=f"UI Summary generated: {ui_summary}")],
+                ),
+            )
+
+            # Apply the event to update state
+            await self.session_service.append_event(session, ui_event)
+
+            logger.info(
+                f"Stored UI summary for investigation {investigation_id}: {ui_summary}"
+            )
+
+            # Broadcast UI summary update to WebSocket clients
+            await broadcast_ui_summary_update(
+                investigation_id, ui_summary, full_content
+            )
+
+        except Exception as e:
+            logger.error(f"Error storing UI summary for {investigation_id}: {e}")
