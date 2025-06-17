@@ -8,21 +8,11 @@ help:
 
 dev-frontend:
 	@echo "Starting frontend development server..."
-	@cd frontend && npm run dev
+	@cd frontend && npm run start
 
 dev-backend:
 	@echo "Starting backend development server..."
-	cd backend && .venv/bin/langgraph dev
-
-# Alternative method using bash -c for environment activation
-dev-backend-alt:
-	@echo "Starting backend development server with activated environment..."
-	cd backend && bash -c "source .venv/bin/activate && langgraph dev"
-
-# Alternative method using uv (if you're using uv)
-dev-backend-uv:
-	@echo "Starting backend development server with uv..."
-	cd backend && uv run langgraph dev
+	cd backend && uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Run frontend and backend concurrently
 dev:

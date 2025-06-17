@@ -14,7 +14,7 @@ from adk.models.investigation import (
     DecisionRequest,
     DecisionResponse,
 )
-from adk.services.investigation_service_clean import InvestigationService
+from adk.services.investigation_service import InvestigationService
 
 logger = logging.getLogger(__name__)
 
@@ -365,7 +365,7 @@ async def investigation_service_health(
         return {
             "status": "healthy",
             "service": "investigation_service",
-            "investigations_count": len(investigation_service.investigations),
+            "investigations_count": await investigation_service.get_investigations_count(),
             "active_sessions": len(investigation_service.runners),
         }
 

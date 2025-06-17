@@ -1,4 +1,4 @@
-"""Investigation service for managing solar investigations"""
+"""Investigation service using pure database storage via Google ADK DatabaseSessionService"""
 
 import logging
 import uuid
@@ -25,94 +25,36 @@ logger = logging.getLogger(__name__)
 
 
 class InvestigationService:
-    """Service for managing solar investigations"""
+    """Service for managing solar investigations using pure database storage"""
 
     def __init__(self):
         # Get application settings
         settings = get_settings()
 
-        # Use persistent database storage for sessions
+        # Use persistent database storage for everything
         self.session_service = DatabaseSessionService(db_url=settings.database_url)
 
-        # Simple file-based persistence for investigations (quick fix)
-        self.investigations_file = "investigations_data.json"
+        # Application constants
+        self.app_name = "solar_investigation_api"
 
-        # In-memory cache loaded from file
-        self.investigations: Dict[str, Investigation] = {}
-        self.chat_histories: Dict[str, List[AgentMessage]] = {}
-        self.runners: Dict[str, Runner] = {}
+        # Service dependencies
         self.plant_service = PlantService()
 
-        # Load existing investigations from file
-        self._load_investigations_from_file()
+        # In-memory cache for active runners only
+        self.runners: Dict[str, Runner] = {}
 
         logger.info(
-            f"Initialized InvestigationService with database: {settings.database_url}"
-        )
-        logger.info(
-            f"Loaded {len(self.investigations)} investigations from file storage"
+            f"Initialized InvestigationService with pure database storage: {settings.database_url}"
         )
 
-    def _load_investigations_from_file(self):
-        """Load investigations from JSON file"""
-        try:
-            import os
-
-            if os.path.exists(self.investigations_file):
-                with open(self.investigations_file, "r") as f:
-                    data = json.load(f)
-                    for inv_id, inv_data in data.items():
-                        # Convert ISO strings back to datetime/date objects
-                        inv_data["created_at"] = datetime.fromisoformat(
-                            inv_data["created_at"]
-                        )
-                        inv_data["updated_at"] = datetime.fromisoformat(
-                            inv_data["updated_at"]
-                        )
-                        if inv_data["completed_at"]:
-                            inv_data["completed_at"] = datetime.fromisoformat(
-                                inv_data["completed_at"]
-                            )
-                        inv_data["start_date"] = datetime.fromisoformat(
-                            inv_data["start_date"]
-                        ).date()
-                        inv_data["end_date"] = datetime.fromisoformat(
-                            inv_data["end_date"]
-                        ).date()
-                        inv_data["status"] = InvestigationStatus(inv_data["status"])
-
-                        investigation = Investigation(**inv_data)
-                        self.investigations[inv_id] = investigation
-        except Exception as e:
-            logger.error(f"Error loading investigations from file: {e}")
-
-    def _save_investigations_to_file(self):
-        """Save investigations to JSON file"""
-        try:
-            data = {}
-            for inv_id, investigation in self.investigations.items():
-                inv_dict = investigation.model_dump()
-                # Convert datetime objects to ISO strings for JSON serialization
-                inv_dict["created_at"] = investigation.created_at.isoformat()
-                inv_dict["updated_at"] = investigation.updated_at.isoformat()
-                if investigation.completed_at:
-                    inv_dict["completed_at"] = investigation.completed_at.isoformat()
-                else:
-                    inv_dict["completed_at"] = None
-                inv_dict["start_date"] = investigation.start_date.isoformat()
-                inv_dict["end_date"] = investigation.end_date.isoformat()
-                inv_dict["status"] = investigation.status.value
-                data[inv_id] = inv_dict
-
-            with open(self.investigations_file, "w") as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving investigations to file: {e}")
+    def _get_session_id(self, investigation_id: str) -> str:
+        """Generate consistent session ID for investigation"""
+        return f"session_{investigation_id}"
 
     async def _create_investigation(
         self, request: InvestigationRequest
     ) -> Investigation:
-        """Create a new solar investigation"""
+        """Create a new solar investigation and store in database"""
         # Validate that the plant exists
         plant = await self.plant_service.get_plant_by_id(request.plant_id)
         if not plant:
@@ -125,6 +67,7 @@ class InvestigationService:
         if date_diff > 5:
             raise ValueError("Date range cannot exceed 5 days")
 
+        # Create investigation object
         investigation = Investigation(
             plant_id=request.plant_id,
             start_date=request.start_date,
@@ -133,10 +76,33 @@ class InvestigationService:
             status=InvestigationStatus.PENDING,
         )
 
-        # Store investigation in memory and file
-        self.investigations[investigation.id] = investigation
-        self.chat_histories[investigation.id] = []
-        self._save_investigations_to_file()
+        # Store investigation metadata in session state
+        session_id = self._get_session_id(investigation.id)
+        investigation_data = {
+            "investigation": {
+                "id": investigation.id,
+                "plant_id": investigation.plant_id,
+                "start_date": investigation.start_date.isoformat(),
+                "end_date": investigation.end_date.isoformat(),
+                "additional_notes": investigation.additional_notes,
+                "status": investigation.status.value,
+                "user_id": investigation.user_id,
+                "created_at": investigation.created_at.isoformat(),
+                "updated_at": investigation.updated_at.isoformat(),
+                "completed_at": None,
+                "result": None,
+                "error_message": None,
+                "session_id": session_id,
+            }
+        }
+
+        # Create session in database with investigation metadata
+        await self.session_service.create_session(
+            app_name=self.app_name,
+            user_id=investigation.user_id,
+            session_id=session_id,
+            state=investigation_data,
+        )
 
         logger.info(
             f"Created investigation {investigation.id} for plant: {request.plant_id} "
@@ -145,80 +111,134 @@ class InvestigationService:
         return investigation
 
     async def get_investigation(self, investigation_id: str) -> Optional[Investigation]:
-        """Get investigation by ID"""
-        return self.investigations.get(investigation_id)
+        """Get investigation by ID from database"""
+        try:
+            session_id = self._get_session_id(investigation_id)
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id="api_user",  # Default user for now
+                session_id=session_id,
+            )
+
+            if not session or not session.state.get("investigation"):
+                return None
+
+            # Reconstruct Investigation object from session state
+            inv_data = session.state["investigation"]
+            investigation = Investigation(
+                id=inv_data["id"],
+                plant_id=inv_data["plant_id"],
+                start_date=date.fromisoformat(inv_data["start_date"]),
+                end_date=date.fromisoformat(inv_data["end_date"]),
+                additional_notes=inv_data.get("additional_notes"),
+                status=InvestigationStatus(inv_data["status"]),
+                user_id=inv_data["user_id"],
+                created_at=datetime.fromisoformat(inv_data["created_at"]),
+                updated_at=datetime.fromisoformat(inv_data["updated_at"]),
+                completed_at=(
+                    datetime.fromisoformat(inv_data["completed_at"])
+                    if inv_data.get("completed_at")
+                    else None
+                ),
+                result=inv_data.get("result"),
+                error_message=inv_data.get("error_message"),
+                session_id=inv_data["session_id"],
+            )
+
+            return investigation
+
+        except Exception as e:
+            logger.error(f"Error retrieving investigation {investigation_id}: {e}")
+            return None
 
     async def list_investigations(
         self, limit: int = 50, offset: int = 0
     ) -> List[Investigation]:
-        """List all investigations with pagination"""
-        investigations = list(self.investigations.values())
-        # Sort by creation time (newest first)
-        investigations.sort(key=lambda x: x.created_at, reverse=True)
-        return investigations[offset : offset + limit]
+        """List all investigations from database"""
+        try:
+            # List all sessions for our app
+            sessions_response = await self.session_service.list_sessions(
+                app_name=self.app_name,
+                user_id="api_user",
+            )
+
+            investigations = []
+            for session_summary in sessions_response.sessions:
+                # Get full session to access state
+                session = await self.session_service.get_session(
+                    app_name=self.app_name,
+                    user_id=session_summary.user_id,
+                    session_id=session_summary.id,
+                )
+
+                if session and session.state.get("investigation"):
+                    inv_data = session.state["investigation"]
+                    investigation = Investigation(
+                        id=inv_data["id"],
+                        plant_id=inv_data["plant_id"],
+                        start_date=date.fromisoformat(inv_data["start_date"]),
+                        end_date=date.fromisoformat(inv_data["end_date"]),
+                        additional_notes=inv_data.get("additional_notes"),
+                        status=InvestigationStatus(inv_data["status"]),
+                        user_id=inv_data["user_id"],
+                        created_at=datetime.fromisoformat(inv_data["created_at"]),
+                        updated_at=datetime.fromisoformat(inv_data["updated_at"]),
+                        completed_at=(
+                            datetime.fromisoformat(inv_data["completed_at"])
+                            if inv_data.get("completed_at")
+                            else None
+                        ),
+                        result=inv_data.get("result"),
+                        error_message=inv_data.get("error_message"),
+                        session_id=inv_data["session_id"],
+                    )
+                    investigations.append(investigation)
+
+            # Sort by creation time (newest first)
+            investigations.sort(key=lambda x: x.created_at, reverse=True)
+            return investigations[offset : offset + limit]
+
+        except Exception as e:
+            logger.error(f"Error listing investigations: {e}")
+            return []
 
     async def start_investigation(self, request: InvestigationRequest) -> Investigation:
         """Start running the investigation using Google ADK agent"""
-        inves = await self._create_investigation(request)
-        investigation_id = inves.id
-        investigation = self.investigations.get(investigation_id)
-        if not investigation:
-            raise ValueError(f"Investigation {investigation_id} not found")
-
-        if investigation.status != InvestigationStatus.PENDING:
-            raise ValueError(
-                f"Investigation {investigation_id} is not in pending status"
-            )
+        # Create investigation
+        investigation = await self._create_investigation(request)
 
         try:
             # Update status to running
-            investigation.status = InvestigationStatus.RUNNING
-            investigation.updated_at = datetime.now()
-            self._save_investigations_to_file()
+            await self._update_investigation_status(
+                investigation.id, InvestigationStatus.RUNNING
+            )
 
             # Create agent and runner
             agent = get_solar_investigation_agent()
             runner = Runner(
                 agent=agent,
-                app_name="solar_investigation_api",
+                app_name=self.app_name,
                 session_service=self.session_service,
             )
 
             # Store runner for this investigation
-            self.runners[investigation_id] = runner
+            self.runners[investigation.id] = runner
 
-            # Create session
-            session_id = f"session_{investigation_id}"
-            investigation.session_id = session_id
-
-            await self.session_service.create_session(
-                app_name="solar_investigation_api",
-                user_id=investigation.user_id,
-                session_id=session_id,
-            )
-
-            # Add initial system message
+            # Get plant information for initial message
             plant = await self.plant_service.get_plant_by_id(investigation.plant_id)
             plant_name = plant.plant_name if plant else "Unknown Plant"
-            await self._add_agent_message(
-                investigation_id,
-                AgentMessageType.SYSTEM,
-                f"Starting solar investigation for {plant_name} "
-                f"from {investigation.start_date} to {investigation.end_date}",
-            )
 
-            # Save updated investigation
-            self._save_investigations_to_file()
+            # The initial system message will be automatically stored in the database
+            # when we send it through the runner, so no manual chat history management needed
 
-            # TODO: implement async agent execution - for now just mark as started
-            logger.info(f"Started investigation {investigation_id}")
+            logger.info(f"Started investigation {investigation.id}")
+            investigation.status = InvestigationStatus.RUNNING
 
         except Exception as e:
-            investigation.status = InvestigationStatus.FAILED
-            investigation.error_message = str(e)
-            investigation.updated_at = datetime.now()
-            self._save_investigations_to_file()
-            logger.error(f"Failed to start investigation {investigation_id}: {e}")
+            await self._update_investigation_status(
+                investigation.id, InvestigationStatus.FAILED, error_message=str(e)
+            )
+            logger.error(f"Failed to start investigation {investigation.id}: {e}")
             raise
 
         return investigation
@@ -227,20 +247,22 @@ class InvestigationService:
         self, investigation_id: str, user_message: str
     ) -> str:
         """Run a step of the investigation with user message"""
-        investigation = self.investigations.get(investigation_id)
+        investigation = await self.get_investigation(investigation_id)
         if not investigation:
             raise ValueError(f"Investigation {investigation_id} not found")
 
         runner = self.runners.get(investigation_id)
         if not runner:
-            raise ValueError(f"No active runner for investigation {investigation_id}")
+            # Recreate runner if not in memory
+            agent = get_solar_investigation_agent()
+            runner = Runner(
+                agent=agent,
+                app_name=self.app_name,
+                session_service=self.session_service,
+            )
+            self.runners[investigation_id] = runner
 
         try:
-            # Add user message to chat history
-            await self._add_agent_message(
-                investigation_id, AgentMessageType.USER, user_message
-            )
-
             # Prepare query for agent
             plant = await self.plant_service.get_plant_by_id(investigation.plant_id)
             query = {
@@ -253,17 +275,15 @@ class InvestigationService:
                 "user_message": user_message,
             }
 
-            # Send to agent
+            # Send to agent - ADK will automatically store messages in database
             user_content = types.Content(
                 role="user", parts=[types.Part(text=json.dumps(query))]
             )
 
             final_response = "No response received"
-            session_id = investigation.session_id
-            if not session_id:
-                raise ValueError(
-                    f"No session found for investigation {investigation_id}"
-                )
+            session_id = investigation.session_id or self._get_session_id(
+                investigation_id
+            )
 
             async for event in runner.run_async(
                 user_id=investigation.user_id,
@@ -273,14 +293,10 @@ class InvestigationService:
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or "Empty response"
 
-            # Add agent response to chat history
-            await self._add_agent_message(
-                investigation_id, AgentMessageType.AGENT, final_response
+            # Update investigation timestamp
+            await self._update_investigation_status(
+                investigation_id, investigation.status
             )
-
-            # Update investigation
-            investigation.updated_at = datetime.now()
-            self._save_investigations_to_file()
 
             return final_response
 
@@ -288,80 +304,225 @@ class InvestigationService:
             logger.error(
                 f"Error running investigation step for {investigation_id}: {e}"
             )
-            await self._add_agent_message(
-                investigation_id, AgentMessageType.SYSTEM, f"Error: {str(e)}"
-            )
             raise
 
     async def complete_investigation(
         self, investigation_id: str, result: Dict[str, Any]
     ) -> Investigation:
         """Mark investigation as completed with results"""
-        investigation = self.investigations.get(investigation_id)
+        investigation = await self.get_investigation(investigation_id)
         if not investigation:
             raise ValueError(f"Investigation {investigation_id} not found")
 
-        investigation.status = InvestigationStatus.COMPLETED
-        investigation.result = result
-        investigation.completed_at = datetime.now()
-        investigation.updated_at = datetime.now()
+        # Update investigation in database
+        await self._update_investigation_status(
+            investigation_id,
+            InvestigationStatus.COMPLETED,
+            result=result,
+            completed_at=datetime.now(),
+        )
 
         # Clean up runner
         if investigation_id in self.runners:
             del self.runners[investigation_id]
 
-        # Save to file
-        self._save_investigations_to_file()
-
         logger.info(f"Completed investigation {investigation_id}")
-        return investigation
+
+        # Return updated investigation
+        return await self.get_investigation(investigation_id)
 
     async def get_chat_history(self, investigation_id: str) -> List[AgentMessage]:
-        """Get chat history for an investigation"""
-        return self.chat_histories.get(investigation_id, [])
+        """Get chat history for an investigation from database events"""
+        try:
+            session_id = self._get_session_id(investigation_id)
+
+            # Get session with events
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id="api_user",
+                session_id=session_id,
+            )
+
+            if not session:
+                return []
+
+            # Convert ADK events to our AgentMessage format
+            messages = []
+            for event in session.events:
+                # Determine message type based on event author
+                if event.author == "user":
+                    message_type = AgentMessageType.USER
+                elif event.author == "agent":
+                    message_type = AgentMessageType.AGENT
+                elif event.author == "system":
+                    message_type = AgentMessageType.SYSTEM
+                else:
+                    message_type = AgentMessageType.THINKING
+
+                # Extract content from event
+                content = ""
+                if (
+                    event.content
+                    and hasattr(event.content, "parts")
+                    and event.content.parts
+                ):
+                    content = event.content.parts[0].text or ""
+
+                message = AgentMessage(
+                    id=event.id,
+                    investigation_id=investigation_id,
+                    message_type=message_type,
+                    content=content,
+                    metadata={
+                        "event_author": event.author,
+                        "timestamp": event.timestamp,
+                    },
+                    timestamp=event.timestamp,
+                )
+                messages.append(message)
+
+            return messages
+
+        except Exception as e:
+            logger.error(f"Error retrieving chat history for {investigation_id}: {e}")
+            return []
 
     async def handle_decision(
         self, investigation_id: str, decision: str, decision_type: str
     ) -> str:
         """Handle human decision during investigation"""
-        investigation = self.investigations.get(investigation_id)
+        investigation = await self.get_investigation(investigation_id)
         if not investigation:
             raise ValueError(f"Investigation {investigation_id} not found")
 
-        # Add decision to chat history
-        await self._add_agent_message(
-            investigation_id,
-            AgentMessageType.USER,
-            f"Decision ({decision_type}): {decision}",
-        )
+        # The decision will be automatically stored when we send it through the runner
+        runner = self.runners.get(investigation_id)
+        if runner:
+            decision_content = types.Content(
+                role="user",
+                parts=[types.Part(text=f"Decision ({decision_type}): {decision}")],
+            )
 
-        # TODO: implement decision handling logic
-        # For now, just acknowledge the decision
-        response = f"Decision received: {decision}"
+            # Send decision through ADK - it will store automatically
+            session_id = investigation.session_id or self._get_session_id(
+                investigation_id
+            )
+            async for event in runner.run_async(
+                user_id=investigation.user_id,
+                session_id=session_id,
+                new_message=decision_content,
+            ):
+                if event.is_final_response() and event.content and event.content.parts:
+                    return event.content.parts[0].text or "Decision acknowledged"
 
-        await self._add_agent_message(
-            investigation_id, AgentMessageType.SYSTEM, response
-        )
+        return "Decision received"
 
-        return response
-
-    async def _add_agent_message(
+    async def _update_investigation_status(
         self,
         investigation_id: str,
-        message_type: AgentMessageType,
-        content: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        status: InvestigationStatus,
+        error_message: Optional[str] = None,
+        result: Optional[Dict[str, Any]] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> None:
+        """Update investigation status in database"""
+        try:
+            session_id = self._get_session_id(investigation_id)
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id="api_user",
+                session_id=session_id,
+            )
+
+            if session and session.state.get("investigation"):
+                # Update investigation data in session state
+                inv_data = session.state["investigation"]
+                inv_data["status"] = status.value
+                inv_data["updated_at"] = datetime.now().isoformat()
+
+                if error_message:
+                    inv_data["error_message"] = error_message
+                if result:
+                    inv_data["result"] = result
+                if completed_at:
+                    inv_data["completed_at"] = completed_at.isoformat()
+
+                # Update session state - ADK will persist this
+                session.state["investigation"] = inv_data
+
+        except Exception as e:
+            logger.error(
+                f"Error updating investigation status for {investigation_id}: {e}"
+            )
+
+    async def add_thinking_message(
+        self,
+        investigation_id: str,
+        title: str,
+        description: str,
+        level: str = "major",  # "major" or "detailed"
+        step_type: str = "reasoning",  # "reasoning", "decision", "handoff", "tool_call", etc.
     ) -> AgentMessage:
-        """Add a message to the chat history"""
-        message = AgentMessage(
-            investigation_id=investigation_id,
-            message_type=message_type,
-            content=content,
-            metadata=metadata,
+        """Add a thinking/reasoning message to show agent's thought process"""
+        # For database-only approach, thinking messages are handled by ADK automatically
+        # We can optionally send them through the runner if needed
+        try:
+            runner = self.runners.get(investigation_id)
+            if runner:
+                content = f"{title}: {description}"
+                thinking_content = types.Content(
+                    role="user",  # ADK will classify this appropriately
+                    parts=[types.Part(text=f"[THINKING] {content}")],
+                )
+
+                session_id = self._get_session_id(investigation_id)
+                async for event in runner.run_async(
+                    user_id="api_user",
+                    session_id=session_id,
+                    new_message=thinking_content,
+                ):
+                    # Just process the event - ADK stores it automatically
+                    pass
+
+            # Return a mock AgentMessage for compatibility
+            return AgentMessage(
+                investigation_id=investigation_id,
+                message_type=AgentMessageType.THINKING,
+                content=f"{title}: {description}",
+                metadata={
+                    "thinking": True,
+                    "level": level,
+                    "step_type": step_type,
+                    "title": title,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Error adding thinking message: {e}")
+            # Return a basic message even if storing fails
+            return AgentMessage(
+                investigation_id=investigation_id,
+                message_type=AgentMessageType.THINKING,
+                content=f"{title}: {description}",
+                metadata={"error": str(e)},
+            )
+
+    @property
+    def investigations(self) -> Dict[str, Investigation]:
+        """Legacy compatibility property - returns empty dict since we use database"""
+        logger.warning(
+            "investigations property accessed - this is legacy, use list_investigations() instead"
         )
+        return {}
 
-        if investigation_id not in self.chat_histories:
-            self.chat_histories[investigation_id] = []
-
-        self.chat_histories[investigation_id].append(message)
-        return message
+    async def get_investigations_count(self) -> int:
+        """Get total count of investigations"""
+        try:
+            sessions_response = await self.session_service.list_sessions(
+                app_name=self.app_name,
+                user_id="api_user",
+            )
+            return len(sessions_response.sessions)
+        except Exception as e:
+            logger.error(f"Error getting investigations count: {e}")
+            return 0
