@@ -322,54 +322,52 @@ class InvestigationService:
             plant = await self.plant_service.get_plant_by_id(investigation.plant_id)
             plant_name = plant.plant_name if plant else "Unknown Plant"
 
-            # Create comprehensive initial investigation prompt
-            # TODO: Enhance this template with real plant data and energy consumption patterns
             initial_prompt = f"""
-Please begin a comprehensive solar installation feasibility investigation for the following solar plant:
+                Please begin a comprehensive solar installation feasibility investigation for the following solar plant:
 
-PLANT INFORMATION:
-- Plant ID: {investigation.plant_id}
-- Plant Name: {plant_name}
-- Plant Type: {plant.type if plant else "Unknown"}
-- Location: {getattr(plant, 'location', 'Location data unavailable')}
+                PLANT INFORMATION:
+                - Plant ID: {investigation.plant_id}
+                - Plant Name: {plant_name}
+                - Plant Type: {plant.type if plant else "Unknown"}
+                - Location: {getattr(plant, 'location', 'Location data unavailable')}
 
-INVESTIGATION SCOPE:
-- Analysis Period: {investigation.start_date.isoformat()} to {investigation.end_date.isoformat()}
-- Duration: {(investigation.end_date - investigation.start_date).days + 1} days
-- Focus: Solar installation feasibility and optimization
+                INVESTIGATION SCOPE:
+                - Analysis Period: {investigation.start_date.isoformat()} to {investigation.end_date.isoformat()}
+                - Duration: {(investigation.end_date - investigation.start_date).days + 1} days
+                - Focus: Solar installation feasibility and optimization
 
-ADDITIONAL CONTEXT:
-{investigation.additional_notes or "No additional specifications provided."}
+                ADDITIONAL CONTEXT:
+                {investigation.additional_notes or "No additional specifications provided."}
 
-REQUIRED ANALYSIS:
-Please provide a comprehensive solar feasibility assessment that includes:
+                REQUIRED ANALYSIS:
+                Please provide a comprehensive solar feasibility assessment that includes:
 
-1. SITE SUITABILITY ANALYSIS
-   - Solar irradiation potential for the specified period
-   - Physical site constraints and opportunities
-   - Environmental factors affecting installation
+                1. SITE SUITABILITY ANALYSIS
+                - Solar irradiation potential for the specified period
+                - Physical site constraints and opportunities
+                - Environmental factors affecting installation
 
-2. TECHNICAL ASSESSMENT
-   - Estimated solar system size and configuration
-   - Expected energy production potential
-   - Equipment recommendations and specifications
+                2. TECHNICAL ASSESSMENT
+                - Estimated solar system size and configuration
+                - Expected energy production potential
+                - Equipment recommendations and specifications
 
-3. FINANCIAL ANALYSIS
-   - Installation cost estimates
-   - Projected energy savings and payback period
-   - Available incentives, rebates, and financing options
+                3. FINANCIAL ANALYSIS
+                - Installation cost estimates
+                - Projected energy savings and payback period
+                - Available incentives, rebates, and financing options
 
-4. IMPLEMENTATION ROADMAP
-   - Key milestones and timeline
-   - Permit and regulatory requirements
-   - Risk assessment and mitigation strategies
+                4. IMPLEMENTATION ROADMAP
+                - Key milestones and timeline
+                - Permit and regulatory requirements
+                - Risk assessment and mitigation strategies
 
-5. RECOMMENDATIONS
-   - Clear go/no-go recommendation with reasoning
-   - Alternative options or optimizations
-   - Next steps for proceeding
+                5. RECOMMENDATIONS
+                - Clear go/no-go recommendation with reasoning
+                - Alternative options or optimizations
+                - Next steps for proceeding
 
-Please start your investigation now and provide your initial findings.
+                Please start your investigation now and provide your initial findings.
             """
 
             # Send initial prompt to agent - ADK will automatically store this conversation
