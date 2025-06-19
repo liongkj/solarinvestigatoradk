@@ -1,8 +1,11 @@
 """Simplified Investigation Management Controller using ADK best practices"""
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from typing import List
 import logging
+import json
+import asyncio
 
 from adk.models.investigation import (
     Investigation,
@@ -172,4 +175,133 @@ async def update_investigation_status(
         raise
     except Exception as e:
         logger.error(f"Error updating investigation status {investigation_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/{investigation_id}/stream")
+async def stream_investigation_events(
+    investigation_id: str,
+    service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
+):
+    """Stream investigation events using Server-Sent Events (SSE)"""
+    try:
+        # Check if investigation exists
+        investigation = await service.get_investigation(investigation_id)
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        async def event_generator():
+            """Generate SSE events for investigation progress"""
+            try:
+                # Send initial status
+                initial_data = {
+                    "type": "status",
+                    "investigation_id": investigation_id,
+                    "status": investigation.status.value,
+                    "timestamp": investigation.updated_at.isoformat(),
+                    "ui_summary": investigation.ui_summary,
+                }
+                yield f"data: {json.dumps(initial_data)}\n\n"
+
+                # Stream events from the service
+                async for event in service.get_event_stream(investigation_id):
+                    yield f"data: {json.dumps(event)}\n\n"
+
+            except Exception as e:
+                logger.error(f"Error in SSE event generator: {e}")
+                from datetime import datetime
+
+                error_data = {
+                    "type": "error",
+                    "investigation_id": investigation_id,
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                yield f"data: {json.dumps(error_data)}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Cache-Control",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error setting up SSE stream for investigation {investigation_id}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/{investigation_id}/workorders")
+async def create_workorder_manually(
+    investigation_id: str,
+    workorder_request: dict,  # {"description": "Work order details"}
+    service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
+):
+    """Create a workorder manually for an investigation"""
+    try:
+        # Check if investigation exists
+        investigation = await service.get_investigation(investigation_id)
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        description = workorder_request.get("description", "")
+        if not description:
+            raise HTTPException(
+                status_code=400, detail="Workorder description is required"
+            )
+
+        # Create workorder
+        result = await service.create_workorder_manually(investigation_id, description)
+
+        return {
+            "message": "Workorder created successfully",
+            "result": result,
+            "investigation_id": investigation_id,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error creating workorder for investigation {investigation_id}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/{investigation_id}/workorders")
+async def get_investigation_workorders(
+    investigation_id: str,
+    service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
+):
+    """Get all workorders for an investigation"""
+    try:
+        # Check if investigation exists
+        investigation = await service.get_investigation(investigation_id)
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        workorders = await service.get_workorders(investigation_id)
+
+        return {"investigation_id": investigation_id, "workorders": workorders}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error getting workorders for investigation {investigation_id}: {e}"
+        )
         raise HTTPException(status_code=500, detail="Internal server error")

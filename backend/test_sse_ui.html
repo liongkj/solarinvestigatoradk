@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Investigation SSE Stream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e8f4fd;
+            border-radius: 5px;
+        }
+
+        .event-log {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background: #f9f9f9;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .event {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007acc;
+            background: white;
+        }
+
+        .event.error {
+            border-left-color: #e74c3c;
+            background: #fdf2f2;
+        }
+
+        .event.success {
+            border-left-color: #27ae60;
+            background: #f2fdf2;
+        }
+
+        .event.workorder {
+            border-left-color: #f39c12;
+            background: #fefbf2;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .status.running {
+            background: #3498db;
+            color: white;
+        }
+
+        .status.completed {
+            background: #27ae60;
+            color: white;
+        }
+
+        .status.failed {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .status.pending {
+            background: #f39c12;
+            color: white;
+        }
+
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #005a9e;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🌞 Solar Investigation SSE Stream Test</h1>
+
+        <div class="controls">
+            <div>
+                <label>Investigation ID:</label>
+                <input type="text" id="investigationId" placeholder="Enter investigation ID" />
+                <button onclick="startStream()">Start Stream</button>
+                <button onclick="stopStream()" id="stopBtn" disabled>Stop Stream</button>
+                <button onclick="clearLog()">Clear Log</button>
+            </div>
+
+            <div style="margin-top: 10px;">
+                <label>Create Workorder:</label>
+                <input type="text" id="workorderDesc" placeholder="Work order description" />
+                <button onclick="createWorkorder()">Create Workorder</button>
+            </div>
+
+            <div style="margin-top: 10px;">
+                <span>Status: </span>
+                <span id="connectionStatus" class="status pending">Not Connected</span>
+                <span style="margin-left: 20px;">Events: <span id="eventCount">0</span></span>
+            </div>
+        </div>
+
+        <div class="event-log" id="eventLog">
+            <div class="event">Ready to start streaming...</div>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let eventCount = 0;
+        let currentInvestigationId = null;
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('eventLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const eventDiv = document.createElement('div');
+            eventDiv.className = `event ${type}`;
+            eventDiv.innerHTML = `<strong>${timestamp}</strong> ${message}`;
+            logContainer.appendChild(eventDiv);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Update event count
+            if (type !== 'info') {
+                eventCount++;
+                document.getElementById('eventCount').textContent = eventCount;
+            }
+        }
+
+        function updateStatus(status, message) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.textContent = message || status;
+            statusEl.className = `status ${status}`;
+        }
+
+        function startStream() {
+            const investigationId = document.getElementById('investigationId').value.trim();
+            if (!investigationId) {
+                alert('Please enter an investigation ID');
+                return;
+            }
+
+            stopStream(); // Stop any existing stream
+
+            currentInvestigationId = investigationId;
+            const url = `http://localhost:8000/api/investigations/${investigationId}/stream`;
+
+            log(`🚀 Starting SSE stream for investigation: ${investigationId}`);
+            updateStatus('running', 'Connecting...');
+
+            eventSource = new EventSource(url);
+
+            eventSource.onopen = function (e) {
+                log('✅ SSE connection established', 'success');
+                updateStatus('running', 'Connected');
+                document.getElementById('stopBtn').disabled = false;
+            };
+
+            eventSource.onmessage = function (e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    handleEvent(data);
+                } catch (err) {
+                    log(`❌ Error parsing event data: ${err}`, 'error');
+                }
+            };
+
+            eventSource.onerror = function (e) {
+                log('❌ SSE connection error', 'error');
+                updateStatus('failed', 'Connection Error');
+
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    log('🔌 SSE connection closed');
+                    stopStream();
+                }
+            };
+        }
+
+        function stopStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                log('🛑 SSE stream stopped');
+            }
+            updateStatus('pending', 'Not Connected');
+            document.getElementById('stopBtn').disabled = true;
+            currentInvestigationId = null;
+        }
+
+        function handleEvent(data) {
+            const type = data.type || 'unknown';
+            const timestamp = data.timestamp || new Date().toISOString();
+
+            switch (type) {
+                case 'status':
+                    log(`📊 Status: <span class="status ${data.status}">${data.status}</span>`, 'success');
+                    if (data.ui_summary) {
+                        log(`💡 Summary: ${data.ui_summary.substring(0, 100)}...`);
+                    }
+                    break;
+
+                case 'message':
+                    const messageType = data.message?.message_type || 'unknown';
+                    const content = data.message?.content || 'No content';
+                    log(`💬 ${messageType}: ${content.substring(0, 200)}...`);
+                    break;
+
+                case 'ui_update':
+                    log(`🔄 UI Update: ${data.ui_summary?.substring(0, 100)}...`, 'success');
+                    break;
+
+                case 'workorders':
+                    const count = data.workorders?.length || 0;
+                    log(`🔧 Workorders updated: ${count} workorder(s)`, 'workorder');
+                    break;
+
+                case 'completion':
+                    log(`🎉 Investigation completed with status: <span class="status ${data.status}">${data.status}</span>`, 'success');
+                    if (data.result) {
+                        log(`📋 Result: ${data.result.substring(0, 200)}...`);
+                    }
+                    break;
+
+                case 'heartbeat':
+                    log('💓 Heartbeat received');
+                    break;
+
+                case 'error':
+                    log(`❌ Error: ${data.error}`, 'error');
+                    break;
+
+                default:
+                    log(`❓ Unknown event type: ${type} - ${JSON.stringify(data)}`);
+            }
+        }
+
+        function createWorkorder() {
+            if (!currentInvestigationId) {
+                alert('Start streaming first to set investigation ID');
+                return;
+            }
+
+            const description = document.getElementById('workorderDesc').value.trim();
+            if (!description) {
+                alert('Please enter workorder description');
+                return;
+            }
+
+            const url = `http://localhost:8000/api/investigations/${currentInvestigationId}/workorders`;
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ description })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    log(`🔧 Workorder created: ${data.result}`, 'workorder');
+                    document.getElementById('workorderDesc').value = '';
+                })
+                .catch(error => {
+                    log(`❌ Failed to create workorder: ${error}`, 'error');
+                });
+        }
+
+        function clearLog() {
+            document.getElementById('eventLog').innerHTML = '<div class="event">Log cleared...</div>';
+            eventCount = 0;
+            document.getElementById('eventCount').textContent = eventCount;
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', stopStream);
+    </script>
+</body>
+
+</html>

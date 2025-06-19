@@ -1,0 +1,198 @@
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <button class="btn btn-outline-secondary me-3" routerLink="/dashboard">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </button>
+                    <h2 class="mb-0">Investigation Details</h2>
+                    <span class="badge bg-success ms-2" *ngIf="sseSubscription">
+                        <i class="fas fa-satellite-dish"></i> Live Updates
+                    </span>
+                </div>
+                <div *ngIf="investigation">
+                    <span class="badge fs-6" [class]="getStatusClass()">
+                        {{ investigation.status | titlecase }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div *ngIf="isLoading" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-muted">Loading investigation details...</p>
+            </div>
+
+            <!-- Error State -->
+            <div *ngIf="error && !isLoading" class="alert alert-danger" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                {{ error }}
+            </div>
+
+            <!-- Investigation Content -->
+            <div *ngIf="investigation && !isLoading" class="row">
+                <!-- Left Column: Investigation Info & Progress -->
+                <div class="col-lg-4">
+                    <!-- Investigation Info Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Investigation Information</h5>
+                            <small class="text-muted">{{ formatTimestamp(investigation.created_at) }}</small>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Investigation ID</label>
+                                <div class="fw-bold text-break">{{ investigation.id }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Plant</label>
+                                <div class="fw-bold">{{ investigation.plant_id }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Period</label>
+                                <div>{{ investigation.start_date }} to {{ investigation.end_date }}</div>
+                            </div>
+                            <div class="mb-3" *ngIf="investigation.additional_notes">
+                                <label class="form-label text-muted">Additional Notes</label>
+                                <div>{{ investigation.additional_notes }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Progress</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="progress mb-3">
+                                <div class="progress-bar" role="progressbar" [style.width.%]="getProgressPercentage()"
+                                    [attr.aria-valuenow]="getProgressPercentage()">
+                                    {{ getProgressPercentage() }}%
+                                </div>
+                            </div>
+
+                            <div class="progress-steps">
+                                <div *ngFor="let step of progressSteps"
+                                    class="progress-step d-flex align-items-center mb-2">
+                                    <i class="fas me-2" [class.fa-check-circle]="step.completed"
+                                        [class.fa-circle-notch]="!step.completed" [class.text-success]="step.completed"
+                                        [class.text-muted]="!step.completed"></i>
+                                    <span [class.text-muted]="!step.completed">{{ step.name }}</span>
+                                    <small class="text-muted ms-auto" *ngIf="step.timestamp">
+                                        {{ formatTimestamp(step.timestamp) }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workorders Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Workorders</h5>
+                            <button class="btn btn-sm btn-primary" (click)="createManualWorkorder()">
+                                <i class="fas fa-plus"></i> Create Manual
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div *ngIf="workorders.length === 0" class="text-muted text-center py-3">
+                                <i class="fas fa-clipboard-list fa-2x mb-2"></i>
+                                <p>No workorders yet</p>
+                            </div>
+                            <div *ngFor="let workorder of workorders" class="border rounded p-3 mb-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>{{ workorder.type | titlecase }}</strong>
+                                        <p class="mb-1 text-muted">{{ workorder.description }}</p>
+                                        <small class="text-muted">Priority: {{ workorder.priority }}</small>
+                                    </div>
+                                    <span class="badge" [class.bg-warning]="workorder.status === 'pending'"
+                                        [class.bg-primary]="workorder.status === 'in_progress'"
+                                        [class.bg-success]="workorder.status === 'completed'">
+                                        {{ workorder.status }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Real-time Events Card (Debug) -->
+                    <div class="card mb-4" *ngIf="realTimeEvents.length > 0">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Real-time Events</h5>
+                            <small class="text-muted">Latest {{ realTimeEvents.length }} events</small>
+                        </div>
+                        <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                            <div *ngFor="let event of realTimeEvents" class="border-start border-primary ps-3 mb-2">
+                                <div class="d-flex justify-content-between">
+                                    <span class="badge" [class.bg-info]="event.type === 'message'"
+                                        [class.bg-warning]="event.type === 'ui_update'"
+                                        [class.bg-success]="event.type === 'status_update'"
+                                        [class.bg-primary]="event.type === 'workorder_status'">
+                                        {{ event.type }}
+                                    </span>
+                                    <small class="text-muted">{{ formatTimestamp(event.timestamp) }}</small>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    {{ event.message?.content || event.status || 'Event received' }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Chat Messages -->
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Investigation Progress</h5>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary" [class.active]="showUiSummaries"
+                                    (click)="toggleContentDisplay()">
+                                    Summaries
+                                </button>
+                                <button class="btn btn-outline-secondary" [class.active]="!showUiSummaries"
+                                    (click)="toggleContentDisplay()">
+                                    Full Content
+                                </button>
+                                <button class="btn btn-outline-secondary" [class.active]="showAllThoughts"
+                                    (click)="toggleAllThoughts()">
+                                    Show Thinking
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body chat-container" style="height: 600px; overflow-y: auto;">
+                            <div *ngIf="getVisibleMessages().length === 0" class="text-center text-muted py-5">
+                                <i class="fas fa-comments fa-3x mb-3"></i>
+                                <p>No messages yet. The investigation will start soon...</p>
+                            </div>
+
+                            <div *ngFor="let message of getVisibleMessages()" class="message mb-3 p-3 rounded"
+                                [class]="getMessageTypeClass(message.message_type)">
+
+                                <div class="message-header d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <strong>{{ message.message_type | titlecase }}</strong>
+                                        <span *ngIf="hasUiSummary(message)" class="badge bg-info ms-2">
+                                            <i class="fas fa-magic"></i> Has Summary
+                                        </span>
+                                    </div>
+                                    <small class="text-muted">{{ formatTimestamp(message.timestamp) }}</small>
+                                </div>
+
+                                <div class="message-content">
+                                    <div [innerHTML]="getDisplayContent(message)" class="message-text"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

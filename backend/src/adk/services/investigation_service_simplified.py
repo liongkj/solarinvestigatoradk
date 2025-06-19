@@ -10,6 +10,9 @@ from google.genai import types
 
 from adk.agents.solar_investigation_agent import get_solar_investigation_agent
 from adk.agents.ui_summarizer_agent import generate_ui_summary
+
+# TODO: implement this
+# from adk.agents.workorder_agent import get_workorder_agent
 from adk.config.settings import get_settings
 from adk.models.investigation import (
     Investigation,
@@ -19,7 +22,9 @@ from adk.models.investigation import (
     AgentMessageType,
 )
 from adk.services.plant_service import PlantService
-from adk.services.broadcast_service import broadcast_service
+
+# WebSocket support removed - using SSE-only for simpler architecture
+# from adk.services.broadcast_service import broadcast_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +48,9 @@ class SimplifiedInvestigationService:
         # Single runner instance per investigation (no complex runner management)
         self.active_runners: Dict[str, Runner] = {}
 
+        # Event queues for SSE streaming
+        self.event_queues: Dict[str, asyncio.Queue] = {}
+
         logger.info(
             f"Initialized SimplifiedInvestigationService with ADK: {settings.database_url}"
         )
@@ -54,10 +62,45 @@ class SimplifiedInvestigationService:
     def _create_ui_summary_callback(self, investigation_id: str):
         """Create after_agent_callback for UI summary generation"""
 
-        async def after_agent_callback(callback_context, agent_output):
-            """Process agent output and generate UI summary"""
+        async def after_agent_callback(*args, **kwargs):
+            """Process agent output and generate UI summary - flexible signature"""
             try:
-                if not agent_output or not agent_output.parts:
+                # Handle different callback signatures that Google ADK might use
+                callback_context = None
+                agent_output = None
+
+                # Try to extract parameters from args
+                if len(args) >= 1:
+                    callback_context = args[0]
+                if len(args) >= 2:
+                    agent_output = args[1]
+
+                # Try kwargs
+                if not agent_output:
+                    agent_output = kwargs.get("agent_output") or kwargs.get("output")
+                if not callback_context:
+                    callback_context = kwargs.get("callback_context") or kwargs.get(
+                        "context"
+                    )
+
+                # If still no agent_output, try to extract from callback_context
+                if not agent_output and callback_context:
+                    agent_output = getattr(
+                        callback_context, "agent_output", None
+                    ) or getattr(callback_context, "output", None)
+
+                logger.debug(
+                    f"Callback called with args: {len(args)}, kwargs: {list(kwargs.keys())}"
+                )
+
+                if (
+                    not agent_output
+                    or not hasattr(agent_output, "parts")
+                    or not agent_output.parts
+                ):
+                    logger.warning(
+                        f"No valid agent output available for UI summary generation in investigation {investigation_id}"
+                    )
                     return None
 
                 # Get the full agent response
@@ -81,11 +124,16 @@ class SimplifiedInvestigationService:
                     )
 
                 # Store UI summary in session state using ADK best practices
-                callback_context.state["ui_summary"] = ui_summary
-                callback_context.state["full_content"] = full_content
-                callback_context.state["last_update"] = datetime.now().isoformat()
+                if callback_context and hasattr(callback_context, "state"):
+                    callback_context.state["ui_summary"] = ui_summary
+                    callback_context.state["full_content"] = full_content
+                    callback_context.state["last_update"] = datetime.now().isoformat()
+                else:
+                    logger.warning(
+                        f"No callback_context.state available for investigation {investigation_id}"
+                    )
 
-                # Broadcast to WebSocket clients
+                # Broadcast to SSE clients (WebSocket removed)
                 await self._broadcast_ui_update(
                     investigation_id, ui_summary, full_content
                 )
@@ -213,9 +261,12 @@ class SimplifiedInvestigationService:
             await self._update_status(investigation.id, InvestigationStatus.RUNNING)
 
             # Create agent with after_agent_callback for UI processing
+            # AND workorder agent as sub-agent
             agent = get_solar_investigation_agent(
                 output_key="investigation_result",  # ADK will auto-save to state
                 after_agent_callback=self._create_ui_summary_callback(investigation.id),
+                # TODO: Add workorder agent when implemented
+                # workorder_agent=get_workorder_agent(),
             )
 
             # Create runner
@@ -245,6 +296,9 @@ class SimplifiedInvestigationService:
                 session_id=session_id,
                 new_message=user_content,
             ):
+                # Check for workorder agent requests
+                await self._handle_sub_agent_requests(investigation.id, event)
+
                 # Broadcast real-time updates
                 await self._broadcast_event(investigation.id, event)
 
@@ -273,40 +327,159 @@ class SimplifiedInvestigationService:
             if investigation.id in self.active_runners:
                 del self.active_runners[investigation.id]
 
-    async def continue_investigation(
-        self, investigation_id: str, user_message: str
-    ) -> str:
-        """Continue investigation with user input"""
-        runner = self.active_runners.get(investigation_id)
-        if not runner:
-            # Recreate runner if needed
-            agent = get_solar_investigation_agent(
-                output_key="investigation_result",
-                after_agent_callback=self._create_ui_summary_callback(investigation_id),
+    async def _handle_sub_agent_requests(self, investigation_id: str, event):
+        """Handle sub-agent requests like @workorder-agent"""
+        try:
+            if not event.content or not event.content.parts:
+                return
+
+            content = event.content.parts[0].text or ""
+
+            # Check for workorder agent request
+            if "@workorder-agent" in content.lower():
+                await self._handle_workorder_request(investigation_id, content)
+
+        except Exception as e:
+            logger.error(f"Error handling sub-agent request: {e}")
+
+    async def _handle_workorder_request(self, investigation_id: str, content: str):
+        """Handle workorder agent request"""
+        try:
+            # Broadcast workorder request
+            await self._broadcast_workorder_status(
+                investigation_id,
+                "workorder_requested",
+                "Main agent requesting workorder creation...",
             )
-            runner = Runner(
-                agent=agent,
+
+            # TODO: implement this when workorder agent is ready
+            # workorder_result = await self._call_workorder_agent(investigation_id, content)
+
+            # For now, simulate workorder creation
+            workorder_result = (
+                "workorder created and assigned to maintenance team #MT-001"
+            )
+
+            # Store in session state
+            session_id = self._get_session_id(investigation_id)
+            session = await self.session_service.get_session(
                 app_name=self.app_name,
-                session_service=self.session_service,
+                user_id=self.default_user_id,
+                session_id=session_id,
             )
-            self.active_runners[investigation_id] = runner
 
-        # Send user message
-        session_id = self._get_session_id(investigation_id)
-        user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
+            if session:
+                workorders = session.state.get("workorders", [])
+                workorders.append(
+                    {
+                        "id": f"WO-{len(workorders) + 1}",
+                        "status": "created",
+                        "description": content,
+                        "assigned_to": "maintenance team #MT-001",
+                        "created_at": datetime.now().isoformat(),
+                    }
+                )
+                session.state["workorders"] = workorders
 
-        final_response = ""
-        async for event in runner.run_async(
-            user_id=self.default_user_id,
-            session_id=session_id,
-            new_message=user_content,
-        ):
-            await self._broadcast_event(investigation_id, event)
+            # Broadcast workorder completion
+            await self._broadcast_workorder_status(
+                investigation_id, "workorder_created", workorder_result
+            )
 
-            if event.is_final_response() and event.content and event.content.parts:
-                final_response = event.content.parts[0].text or ""
+            # Continue investigation with workorder result
+            await self.continue_investigation(
+                investigation_id, f"Workorder agent result: {workorder_result}"
+            )
 
-        return final_response or ""
+        except Exception as e:
+            logger.error(f"Error handling workorder request: {e}")
+            await self._broadcast_workorder_status(
+                investigation_id,
+                "workorder_failed",
+                f"Failed to create workorder: {str(e)}",
+            )
+
+    async def _broadcast_workorder_status(
+        self, investigation_id: str, status: str, message: str
+    ):
+        """Queue workorder status updates for SSE (WebSocket removed for simplicity)"""
+        try:
+            # Queue for SSE only
+            await self._queue_sse_event(
+                investigation_id,
+                {
+                    "type": "workorder_status",
+                    "investigation_id": investigation_id,
+                    "status": status,
+                    "message": message,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+        except Exception as e:
+            logger.error(f"Error broadcasting workorder status: {e}")
+
+    async def create_workorder_manually(
+        self, investigation_id: str, workorder_request: str
+    ) -> str:
+        """Allow user to create workorder manually via UI button"""
+        try:
+            # TODO: implement this when workorder agent is ready
+            # return await self._call_workorder_agent(investigation_id, workorder_request)
+
+            # For now, simulate workorder creation
+            workorder_result = (
+                f"workorder created manually: {workorder_request[:100]}..."
+            )
+
+            # Store in session state
+            session_id = self._get_session_id(investigation_id)
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id=self.default_user_id,
+                session_id=session_id,
+            )
+
+            if session:
+                workorders = session.state.get("workorders", [])
+                workorders.append(
+                    {
+                        "id": f"WO-MANUAL-{len(workorders) + 1}",
+                        "status": "created",
+                        "description": workorder_request,
+                        "type": "manual",
+                        "created_at": datetime.now().isoformat(),
+                    }
+                )
+                session.state["workorders"] = workorders
+
+            # Broadcast manual workorder creation
+            await self._broadcast_workorder_status(
+                investigation_id, "manual_workorder_created", workorder_result
+            )
+
+            return workorder_result
+
+        except Exception as e:
+            logger.error(f"Error creating manual workorder: {e}")
+            raise ValueError(f"Failed to create workorder: {str(e)}")
+
+    async def get_workorders(self, investigation_id: str) -> List[Dict[str, Any]]:
+        """Get all workorders for an investigation"""
+        try:
+            session_id = self._get_session_id(investigation_id)
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id=self.default_user_id,
+                session_id=session_id,
+            )
+
+            if session:
+                return session.state.get("workorders", [])
+            return []
+
+        except Exception as e:
+            logger.error(f"Error getting workorders: {e}")
+            return []
 
     async def get_chat_history(self, investigation_id: str) -> List[AgentMessage]:
         """Get chat history from ADK session events"""
@@ -435,16 +608,22 @@ class SimplifiedInvestigationService:
                 if status == InvestigationStatus.COMPLETED:
                     session.state["completed_at"] = datetime.now().isoformat()
 
-                # Broadcast status update
-                await broadcast_service.broadcast_status_update(
-                    investigation_id, status.value
+                # Queue status update for SSE
+                await self._queue_sse_event(
+                    investigation_id,
+                    {
+                        "type": "status_update",
+                        "investigation_id": investigation_id,
+                        "status": status.value,
+                        "timestamp": datetime.now().isoformat(),
+                    },
                 )
 
         except Exception as e:
             logger.error(f"Error updating status: {e}")
 
     async def _broadcast_event(self, investigation_id: str, event):
-        """Broadcast ADK event to WebSocket clients"""
+        """Queue ADK event for SSE streams (WebSocket removed for simplicity)"""
         try:
             if event.content and event.content.parts:
                 message = {
@@ -454,23 +633,43 @@ class SimplifiedInvestigationService:
                     "content": event.content.parts[0].text,
                     "timestamp": datetime.now().isoformat(),
                 }
-                await broadcast_service.broadcast_new_message(investigation_id, message)
+
+                # Queue for SSE only
+                await self._queue_sse_event(
+                    investigation_id,
+                    {
+                        "type": "message",
+                        "investigation_id": investigation_id,
+                        "message": message,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
+
         except Exception as e:
             logger.error(f"Error broadcasting event: {e}")
 
     async def _broadcast_ui_update(
         self, investigation_id: str, ui_summary: str, full_content: str
     ):
-        """Broadcast UI summary update"""
+        """Queue UI summary update for SSE (WebSocket removed for simplicity)"""
         try:
-            await broadcast_service.broadcast_ui_summary_update(
-                investigation_id, ui_summary, full_content
+            # Queue for SSE only
+            await self._queue_sse_event(
+                investigation_id,
+                {
+                    "type": "ui_update",
+                    "investigation_id": investigation_id,
+                    "ui_summary": ui_summary,
+                    "full_content": full_content,
+                    "timestamp": datetime.now().isoformat(),
+                },
             )
+
         except Exception as e:
             logger.error(f"Error broadcasting UI update: {e}")
 
     def _create_investigation_prompt(self, investigation: Investigation, plant) -> str:
-        """Create investigation prompt"""
+        """Create investigation prompt with workorder agent capability"""
         plant_name = plant.plant_name if plant else "Unknown Plant"
 
         return f"""
@@ -488,9 +687,55 @@ class SimplifiedInvestigationService:
         ADDITIONAL CONTEXT:
         {investigation.additional_notes or "No additional specifications provided."}
         
+        AVAILABLE CAPABILITIES:
+        - If you need to create work orders for maintenance or installation tasks, you can request @workorder-agent
+        - You can pause the investigation at any time to wait for external information
+        - You can request human decisions when needed
+        
         Please provide a comprehensive solar feasibility assessment including site analysis, 
         technical assessment, financial analysis, implementation roadmap, and clear recommendations.
+        
+        If you identify any maintenance needs or installation requirements that need work orders, 
+        please mention @workorder-agent with the specific requirements.
         """
+
+    async def continue_investigation(
+        self, investigation_id: str, user_message: str
+    ) -> str:
+        """Continue investigation with user input"""
+        runner = self.active_runners.get(investigation_id)
+        if not runner:
+            # Recreate runner if needed
+            agent = get_solar_investigation_agent(
+                output_key="investigation_result",
+                after_agent_callback=self._create_ui_summary_callback(investigation_id),
+            )
+            runner = Runner(
+                agent=agent,
+                app_name=self.app_name,
+                session_service=self.session_service,
+            )
+            self.active_runners[investigation_id] = runner
+
+        # Send user message
+        session_id = self._get_session_id(investigation_id)
+        user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
+
+        final_response = ""
+        async for event in runner.run_async(
+            user_id=self.default_user_id,
+            session_id=session_id,
+            new_message=user_content,
+        ):
+            # Check for workorder agent requests
+            await self._handle_sub_agent_requests(investigation_id, event)
+
+            await self._broadcast_event(investigation_id, event)
+
+            if event.is_final_response() and event.content and event.content.parts:
+                final_response = event.content.parts[0].text or ""
+
+        return final_response or ""
 
     async def handle_decision(
         self, investigation_id: str, decision: str, decision_type: str = "continue"
@@ -550,6 +795,56 @@ class SimplifiedInvestigationService:
         except Exception as e:
             logger.error(f"Error updating investigation status: {e}")
             return False
+
+    async def get_event_stream(self, investigation_id: str):
+        """Get async generator for SSE events"""
+        # Create event queue for this investigation if not exists
+        if investigation_id not in self.event_queues:
+            self.event_queues[investigation_id] = asyncio.Queue()
+
+        queue = self.event_queues[investigation_id]
+
+        # Send initial connection event
+        initial_event = {
+            "type": "connected",
+            "investigation_id": investigation_id,
+            "timestamp": datetime.now().isoformat(),
+            "message": "SSE stream connected successfully",
+        }
+
+        try:
+            # Send the initial event first
+            yield initial_event
+
+            while True:
+                # Wait for next event with timeout
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield event
+
+                    # Break on completion events
+                    if event.get("type") == "completion":
+                        break
+
+                except asyncio.TimeoutError:
+                    # Send heartbeat on timeout
+                    yield {
+                        "type": "heartbeat",
+                        "investigation_id": investigation_id,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+        finally:
+            # Cleanup queue when done
+            if investigation_id in self.event_queues:
+                del self.event_queues[investigation_id]
+
+    async def _queue_sse_event(self, investigation_id: str, event_data: Dict[str, Any]):
+        """Queue an event for SSE streaming"""
+        if investigation_id in self.event_queues:
+            try:
+                await self.event_queues[investigation_id].put(event_data)
+            except Exception as e:
+                logger.error(f"Error queuing SSE event: {e}")
 
 
 # Singleton instance

@@ -1,6 +1,6 @@
 """Controllers module for Solar Investigator ADK"""
 
-from .investigation_management_controller import (
+from .investigation_management_controller_simplified import (
     router as investigation_management_router,
 )
 
