@@ -168,9 +168,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     startNewInvestigation() {
         // Defensive check to ensure form is initialized
-        if (!this.newInvestigationForm) {
-            this.initializeNewInvestigationForm();
-        }
+
 
         if (!this.newInvestigationForm.plant_id || !this.newInvestigationForm.start_date || !this.newInvestigationForm.end_date) {
             this.error = 'Please select a plant and date range';
