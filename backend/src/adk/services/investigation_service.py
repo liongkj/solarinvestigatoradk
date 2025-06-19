@@ -325,7 +325,9 @@ class InvestigationService:
         return investigation
 
     async def _process_investigation_async(self, investigation: Investigation) -> None:
-        """Process investigation in background task"""
+        """Process investigation in background task
+
+        # TODO: marcus/yk"""
         try:
             # Update status to running
             await self._update_investigation_status(

@@ -1,4 +1,4 @@
-"""Investigation Management API Controllers for Solar Investigator ADK"""
+"""Investigation Management API Controllers for Solar Investigator ADK - Updated for Simplified Service"""
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List
@@ -14,9 +14,11 @@ from adk.models.investigation import (
     DecisionRequest,
     DecisionResponse,
 )
-from adk.services.investigation_service import (
-    get_investigation_service,
-    InvestigationService,
+
+# Updated import to use simplified service
+from adk.services.investigation_service_simplified import (
+    get_simplified_investigation_service,
+    SimplifiedInvestigationService,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,13 +31,15 @@ router = APIRouter(prefix="/api/investigations", tags=["investigation-management
 async def list_investigations(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(10, ge=1, le=100, description="Page size"),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     List all investigations with pagination.
 
     Returns a paginated list of all solar investigations.
     """
-    investigation_service = get_investigation_service()
     try:
         offset = (page - 1) * size
         investigations = await investigation_service.list_investigations(
@@ -62,7 +66,9 @@ async def list_investigations(
 @router.post("/", response_model=InvestigationResponse)
 async def start_new_investigation(
     request: InvestigationRequest,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Start a new solar investigation.
@@ -94,7 +100,9 @@ async def start_new_investigation(
 @router.get("/{investigation_id}")
 async def get_investigation(
     investigation_id: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Get a specific investigation by ID.
@@ -123,7 +131,9 @@ async def get_investigation(
 @router.get("/{investigation_id}/chat", response_model=ChatHistoryResponse)
 async def get_investigation_chat_history(
     investigation_id: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Get agent chat history for an investigation.
@@ -161,7 +171,9 @@ async def get_investigation_chat_history(
 async def handle_human_decision(
     investigation_id: str,
     request: DecisionRequest,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Handle human decisions during investigation.
@@ -228,7 +240,9 @@ async def handle_human_decision(
 async def send_message_to_investigation(
     investigation_id: str,
     message: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Send a message to the investigation agent.
@@ -271,7 +285,9 @@ async def send_message_to_investigation(
 @router.post("/{investigation_id}/simulate-thinking")
 async def simulate_agent_thinking(
     investigation_id: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Simulate agent thinking process for testing the UI.
@@ -360,7 +376,9 @@ async def simulate_agent_thinking(
 @router.post("/{investigation_id}/retry", response_model=InvestigationResponse)
 async def retry_investigation(
     investigation_id: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Retry a failed or cancelled investigation.
@@ -422,7 +440,9 @@ async def retry_investigation(
 @router.delete("/{investigation_id}")
 async def delete_investigation(
     investigation_id: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Delete a specific investigation by ID.
@@ -464,7 +484,9 @@ async def delete_investigation(
 # Health check endpoint specifically for investigation service
 @router.get("/health/service")
 async def investigation_service_health(
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """Health check for the investigation service"""
     try:
@@ -486,7 +508,9 @@ async def investigation_service_health(
 @router.get("/{investigation_id}/ui-summary")
 async def get_investigation_ui_summary(
     investigation_id: str,
-    investigation_service: InvestigationService = Depends(InvestigationService),
+    investigation_service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
 ):
     """
     Get UI summary for an investigation.

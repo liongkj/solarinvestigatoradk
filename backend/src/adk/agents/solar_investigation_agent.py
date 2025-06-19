@@ -28,7 +28,9 @@ class SolarInvestigationInput(BaseModel):
     )
 
 
-def create_solar_investigation_agent() -> LlmAgent:
+def create_solar_investigation_agent(
+    output_key: str = "solar_investigation_result", after_agent_callback=None
+) -> LlmAgent:
     """Create a solar investigation agent following ADK best practices."""
 
     return LlmAgent(
@@ -59,7 +61,8 @@ If information is missing or unclear, ask clarifying questions or make reasonabl
 Focus on helping users make informed decisions about solar energy investments.""",
         tools=[],  # Tools will be added when available
         input_schema=SolarInvestigationInput,
-        output_key="solar_investigation_result",  # Save result to session state
+        output_key=output_key,  # Save result to session state
+        after_agent_callback=after_agent_callback,  # ADK callback for UI processing
     )
 
 
@@ -163,9 +166,11 @@ async def demo_solar_investigation():
 # --- Export Functions ---
 
 
-def get_solar_investigation_agent() -> LlmAgent:
-    """Get the solar investigation agent."""
-    return create_solar_investigation_agent()
+def get_solar_investigation_agent(
+    output_key: str = "solar_investigation_result", after_agent_callback=None
+) -> LlmAgent:
+    """Get the solar investigation agent with optional callback support."""
+    return create_solar_investigation_agent(output_key, after_agent_callback)
 
 
 # --- Compatibility Wrapper (if needed) ---
