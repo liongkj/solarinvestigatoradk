@@ -14,50 +14,29 @@ class PlantService:
         # Initialize with dummy data (TODO: connect to actual database)
         self._dummy_plants = [
             Plant(
-                plant_id="plant-001", plant_name="Solar Farm Alpha", type=PlantType.FIT
-            ),
-            Plant(
-                plant_id="plant-002",
-                plant_name="Residential Complex Beta",
-                type=PlantType.ZERO_EXPORT,
-            ),
-            Plant(
-                plant_id="plant-003",
-                plant_name="Commercial Building Gamma",
+                plant_id="9f085080-8061-11ef-a0c8-e34c9d773f6e",
+                plant_name="Plant TT",
                 type=PlantType.FIT,
             ),
             Plant(
-                plant_id="plant-004",
-                plant_name="Industrial Park Delta",
+                plant_id="99ecfd00-7fdd-11ef-a0c8-e34c9d773f6e",
+                plant_name="Plant P",
                 type=PlantType.ZERO_EXPORT,
             ),
             Plant(
-                plant_id="plant-005",
-                plant_name="School Campus Epsilon",
+                plant_id="452a5270-fc1f-11ec-9d0d-5faa5f7f8fb1",
+                plant_name="Plant TH",
                 type=PlantType.FIT,
             ),
             Plant(
-                plant_id="plant-006",
-                plant_name="Hospital Complex Zeta",
-                type=PlantType.ZERO_EXPORT,
-            ),
-            Plant(
-                plant_id="plant-007", plant_name="Shopping Mall Eta", type=PlantType.FIT
-            ),
-            Plant(
-                plant_id="plant-008",
-                plant_name="Office Tower Theta",
-                type=PlantType.ZERO_EXPORT,
-            ),
-            Plant(
-                plant_id="plant-009",
-                plant_name="University Campus Iota",
+                plant_id="282fcf50-4e31-11ee-be3c-c169ad1457df",
+                plant_name="Plant D",
                 type=PlantType.FIT,
             ),
             Plant(
-                plant_id="plant-010",
-                plant_name="Manufacturing Plant Kappa",
-                type=PlantType.ZERO_EXPORT,
+                plant_id="6b855460-e815-11ec-9d0d-5faa5f7f8fb1",
+                plant_name="Plant S",
+                type=PlantType.FIT,
             ),
         ]
 

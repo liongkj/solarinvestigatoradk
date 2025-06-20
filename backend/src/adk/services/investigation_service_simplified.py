@@ -6,7 +6,8 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-from google.genai.adk import RunConfig, StreamingMode
+
+# from google.genai.adk import RunConfig, StreamingMode
 from google.genai import types
 
 from adk.agents.solar_investigation_agent import get_solar_investigation_agent
@@ -255,7 +256,9 @@ class SimplifiedInvestigationService:
 
         return investigation
 
-    async def _process_investigation_async(self, investigation: Investigation) -> None:
+    async def _process_investigation_async(
+        self, investigation: Investigation
+    ) -> None:  # TODO: add agent here
         """Process investigation using ADK best practices"""
         try:
             # Send initial investigation started event
@@ -277,9 +280,9 @@ class SimplifiedInvestigationService:
             agent = get_solar_investigation_agent(
                 output_key="investigation_result",  # ADK will auto-save to state
                 after_agent_callback=self._create_ui_summary_callback(investigation.id),
-                # TODO: Add workorder agent when implemented
+                # TODO: Add workorder agent when implemented later
                 # workorder_agent=get_workorder_agent(),
-            )
+            )  # swap to out agent
 
             # Create runner
             runner = Runner(
@@ -302,7 +305,7 @@ class SimplifiedInvestigationService:
             )
 
             # Create RunConfig for SSE streaming (word-by-word)
-            run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
+            # run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
 
             # Process with ADK (handles events, state, callbacks automatically)
             final_response = None
@@ -311,7 +314,7 @@ class SimplifiedInvestigationService:
                 user_id=self.default_user_id,
                 session_id=session_id,
                 new_message=user_content,
-                run_config=run_config,
+                # run_config=run_config,
             ):
                 event_count += 1
                 logger.info(
@@ -711,7 +714,9 @@ class SimplifiedInvestigationService:
             logger.error(f"Error broadcasting UI update: {e}")
 
     def _create_investigation_prompt(self, investigation: Investigation, plant) -> str:
-        """Create investigation prompt with workorder agent capability"""
+        """Create investigation prompt with workorder agent capability
+        #TODO: update orchestrator prompt
+        """
         plant_name = plant.plant_name if plant else "Unknown Plant"
 
         return f"""

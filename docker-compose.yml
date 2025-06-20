@@ -24,16 +24,16 @@ services:
       interval: 5s
 
   # Redis for ADK (optional, for caching and pub/sub)
-  adk-redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: redis-cli ping
-      start_period: 10s
-      timeout: 1s
-      retries: 5
-      interval: 5s
+  # adk-redis:
+    # image: redis:7-alpine
+    # ports:
+    #   - "6379:6379"
+    # healthcheck:
+    #   test: redis-cli ping
+    #   start_period: 10s
+    #   timeout: 1s
+    #   retries: 5
+    #   interval: 5s
 
   # Legacy LangGraph services (keep for reference)
   langgraph-postgres:
@@ -53,54 +53,54 @@ services:
       retries: 5
       interval: 5s
 
-  langgraph-redis:
-    image: redis:7-alpine
-    ports:
-      - "6380:6379"
-    healthcheck:
-      test: redis-cli ping
-      start_period: 10s
-      timeout: 1s
-      retries: 5
-      interval: 5s
-  # FastAPI application with ADK
-  adk-api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    depends_on:
-      adk-postgres:
-        condition: service_healthy
-      adk-redis:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://adk_user:adk_password@adk-postgres:5432/adk_solar_investigator
-      REDIS_URL: redis://adk-redis:6379
-      ENVIRONMENT: development
-    volumes:
-      - ./backend:/app
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+  # langgraph-redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6380:6379"
+  #   healthcheck:
+  #     test: redis-cli ping
+  #     start_period: 10s
+  #     timeout: 1s
+  #     retries: 5
+  #     interval: 5s
+  # # FastAPI application with ADK
+  # adk-api:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     adk-postgres:
+  #       condition: service_healthy
+  #     adk-redis:
+  #       condition: service_healthy
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     DATABASE_URL: postgresql://adk_user:adk_password@adk-postgres:5432/adk_solar_investigator
+  #     REDIS_URL: redis://adk-redis:6379
+  #     ENVIRONMENT: development
+  #   volumes:
+  #     - ./backend:/app
+  #   command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # Legacy LangGraph API (keep for reference)
-  langgraph-api:
-    build:
-      context: .
-      dockerfile: ./Dockerfile
-    ports:
-      - "8123:8000"
-    depends_on:
-      langgraph-redis:
-        condition: service_healthy
-      langgraph-postgres:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      # GEMINI_API_KEY: ${GEMINI_API_KEY}
-      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
-      REDIS_URI: redis://langgraph-redis:6379
-      POSTGRES_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable
+  # # Legacy LangGraph API (keep for reference)
+  # langgraph-api:
+  #   build:
+  #     context: .
+  #     dockerfile: ./Dockerfile
+  #   ports:
+  #     - "8123:8000"
+  #   depends_on:
+  #     langgraph-redis:
+  #       condition: service_healthy
+  #     langgraph-postgres:
+  #       condition: service_healthy
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     # GEMINI_API_KEY: ${GEMINI_API_KEY}
+  #     LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
+  #     REDIS_URI: redis://langgraph-redis:6379
+  #     POSTGRES_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable

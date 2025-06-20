@@ -8,7 +8,8 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
-from google.genai.adk import RunConfig, StreamingMode
+
+# from google.genai.adk import RunConfig, StreamingMode
 from pydantic import BaseModel, Field
 import logging
 
@@ -127,47 +128,19 @@ async def investigate_solar_project(
     )
 
     # Create RunConfig for SSE streaming (word-by-word)
-    run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
+    # run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
 
     final_response = "No response received"
     async for event in runner.run_async(
         user_id=user_id,
         session_id=session_id,
         new_message=user_content,
-        run_config=run_config,
+        # run_config=run_config,
     ):
         if event.is_final_response() and event.content and event.content.parts:
             final_response = event.content.parts[0].text
     print("Final Response:", final_response)
     return final_response
-
-
-# --- Demo/Test Function ---
-
-
-async def demo_solar_investigation():
-    """Demo function to test the solar investigation agent."""
-
-    print("🌞 Solar Investigation Agent Demo")
-    print("=" * 50)
-
-    # Test case 1: Residential property
-    print("\n📋 Test Case 1: Residential Property")
-    result1 = await investigate_solar_project(
-        address="123 Main St, San Jose, CA 95120",
-        monthly_usage=850,
-        property_type="residential",
-    )
-    print("Result:", result1)
-
-    # Test case 2: Commercial property
-    print("\n📋 Test Case 2: Commercial Property")
-    result2 = await investigate_solar_project(
-        address="456 Business Blvd, Austin, TX 78701",
-        monthly_usage=2500,
-        property_type="commercial",
-    )
-    print("Result:", result2)
 
 
 # --- Export Functions ---
@@ -177,17 +150,16 @@ def get_solar_investigation_agent(
     output_key: str = "solar_investigation_result", after_agent_callback=None
 ) -> LlmAgent:
     """Get the solar investigation agent with optional callback support."""
-    return create_solar_investigation_agent(output_key, after_agent_callback)
-
-
-# --- Compatibility Wrapper (if needed) ---
+    return create_solar_investigation_agent(
+        output_key, after_agent_callback
+    )  # TODO: Change entry point to this function
 
 
 class SolarInvestigationAgent:
     """Wrapper class for compatibility."""
 
     def __init__(self, name: str = "SolarInvestigator"):
-        self.agent = create_solar_investigation_agent()
+        self.agent = get_solar_investigation_agent()
         self.name = name
 
     def get_agent(self) -> LlmAgent:
