@@ -27,6 +27,7 @@ uv add google-adk-python
 5. Make the implementation as simple as possible and only as told.
 6. Do stuff in feature based, starting from the frontend, then backend (endpoint). Agent development is done at another branch, so just put TODO: add agent
 7. Pause after each task to be reviewed by the team lead
+8. Always start with scope and requirements, then ask questions to better answer the user.
 
 # Setup rules
 1. Database is already set up, so no need to set up database
