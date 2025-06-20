@@ -257,6 +257,17 @@ class SimplifiedInvestigationService:
     async def _process_investigation_async(self, investigation: Investigation) -> None:
         """Process investigation using ADK best practices"""
         try:
+            # Send initial investigation started event
+            await self._queue_sse_event(
+                investigation.id,
+                {
+                    "type": "investigation_started",
+                    "investigation_id": investigation.id,
+                    "message": "Investigation processing started",
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+
             # Update status to running
             await self._update_status(investigation.id, InvestigationStatus.RUNNING)
 
@@ -291,11 +302,17 @@ class SimplifiedInvestigationService:
 
             # Process with ADK (handles events, state, callbacks automatically)
             final_response = None
+            event_count = 0
             async for event in runner.run_async(
                 user_id=self.default_user_id,
                 session_id=session_id,
                 new_message=user_content,
             ):
+                event_count += 1
+                logger.info(
+                    f"Processing ADK event #{event_count} for investigation {investigation.id}: {event.id}"
+                )
+
                 # Check for workorder agent requests
                 await self._handle_sub_agent_requests(investigation.id, event)
 
@@ -304,6 +321,10 @@ class SimplifiedInvestigationService:
 
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or ""
+
+            logger.info(
+                f"Completed ADK processing for investigation {investigation.id}, processed {event_count} events"
+            )
 
             # Determine final status
             if final_response and len(final_response.strip()) > 10:
@@ -314,6 +335,22 @@ class SimplifiedInvestigationService:
                 await self._update_status(
                     investigation.id, InvestigationStatus.REQUIRES_ATTENTION
                 )
+
+            # Send completion event
+            await self._queue_sse_event(
+                investigation.id,
+                {
+                    "type": "completion",
+                    "investigation_id": investigation.id,
+                    "status": (
+                        InvestigationStatus.COMPLETED.value
+                        if final_response and len(final_response.strip()) > 10
+                        else InvestigationStatus.REQUIRES_ATTENTION.value
+                    ),
+                    "result": final_response if final_response else None,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
 
             logger.info(f"Completed investigation {investigation.id}")
 

@@ -17,13 +17,15 @@ import {
 
 // SSE Event types
 export interface SSEEvent {
-    type: 'message' | 'ui_update' | 'status_update' | 'workorder_status';
+    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'heartbeat' | 'error';
     investigation_id: string;
     timestamp: string;
     message?: any;
     ui_summary?: string;
     full_content?: string;
     status?: string;
+    result?: string;
+    error?: string;
 }
 
 @Injectable({

@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { interval, Subscription, Subject, of } from 'rxjs';
@@ -16,7 +16,7 @@ interface ProgressStep {
 @Component({
     selector: 'app-investigation-detail',
     standalone: true,
-    imports: [CommonModule, FormsModule],
+    imports: [CommonModule, FormsModule, RouterLink],
     templateUrl: './investigation-detail-sse.component.html',
     styleUrls: ['./investigation-detail.component.css']
 })
@@ -223,6 +223,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         }
 
         switch (event.type) {
+            case 'connected':
+                console.log('SSE stream connected:', event.message);
+                break;
+
+            case 'investigation_started':
+                console.log('Investigation processing started:', event.message);
+                break;
+
             case 'message':
                 if (event.message) {
                     // Add new message to chat
@@ -245,7 +253,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 break;
 
             case 'status_update':
+                console.log('Status update received:', event.status);
                 // Reload investigation details to get updated status
+                this.loadInvestigationDetails();
+                break;
+
+            case 'completion':
+                console.log('Investigation completed:', event.status, event.result);
+                // Reload investigation details to get final status
                 this.loadInvestigationDetails();
                 break;
 
@@ -253,6 +268,18 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 // Reload workorders
                 this.loadWorkorders();
                 break;
+
+            case 'heartbeat':
+                console.log('SSE heartbeat received');
+                break;
+
+            case 'error':
+                console.error('SSE error event:', event.error);
+                this.error = event.error || 'Unknown error occurred';
+                break;
+
+            default:
+                console.log('Unknown SSE event type:', event.type, event);
         }
     }
 

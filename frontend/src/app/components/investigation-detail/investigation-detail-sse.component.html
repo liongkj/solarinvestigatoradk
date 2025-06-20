@@ -122,24 +122,34 @@
                     </div>
 
                     <!-- Real-time Events Card (Debug) -->
-                    <div class="card mb-4" *ngIf="realTimeEvents.length > 0">
+                    <div class="card mb-4">
                         <div class="card-header">
                             <h5 class="card-title mb-0">Real-time Events</h5>
                             <small class="text-muted">Latest {{ realTimeEvents.length }} events</small>
                         </div>
                         <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                            <div *ngIf="realTimeEvents.length === 0" class="text-muted text-center py-3">
+                                <i class="fas fa-broadcast-tower fa-2x mb-2"></i>
+                                <p>Waiting for events...</p>
+                                <small *ngIf="sseSubscription" class="text-success">SSE stream active</small>
+                                <small *ngIf="!sseSubscription" class="text-warning">SSE not connected</small>
+                            </div>
                             <div *ngFor="let event of realTimeEvents" class="border-start border-primary ps-3 mb-2">
                                 <div class="d-flex justify-content-between">
                                     <span class="badge" [class.bg-info]="event.type === 'message'"
                                         [class.bg-warning]="event.type === 'ui_update'"
-                                        [class.bg-success]="event.type === 'status_update'"
-                                        [class.bg-primary]="event.type === 'workorder_status'">
+                                        [class.bg-success]="event.type === 'status_update' || event.type === 'connected' || event.type === 'investigation_started'"
+                                        [class.bg-primary]="event.type === 'workorder_status'"
+                                        [class.bg-dark]="event.type === 'completion'"
+                                        [class.bg-secondary]="event.type === 'heartbeat'"
+                                        [class.bg-danger]="event.type === 'error'">
                                         {{ event.type }}
                                     </span>
                                     <small class="text-muted">{{ formatTimestamp(event.timestamp) }}</small>
                                 </div>
                                 <small class="text-muted d-block mt-1">
-                                    {{ event.message?.content || event.status || 'Event received' }}
+                                    {{ event.message?.content || event.status || event.error || event.message || 'Event
+                                    received' }}
                                 </small>
                             </div>
                         </div>

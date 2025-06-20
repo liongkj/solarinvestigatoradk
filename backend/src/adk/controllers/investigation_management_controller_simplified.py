@@ -10,6 +10,7 @@ import asyncio
 from adk.models.investigation import (
     Investigation,
     InvestigationRequest,
+    InvestigationResponse,
     InvestigationStatus,
     AgentMessage,
 )
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/investigations", tags=["investigations"])
 
 
-@router.post("/", response_model=Investigation)
+@router.post("/", response_model=InvestigationResponse)
 async def create_investigation(
     request: InvestigationRequest,
     service: SimplifiedInvestigationService = Depends(
@@ -32,7 +33,11 @@ async def create_investigation(
 ):
     """Create and start a new solar investigation"""
     try:
-        return await service.start_investigation(request)
+        investigation = await service.start_investigation(request)
+        return InvestigationResponse(
+            investigation=investigation,
+            message=f"Investigation started for plant {request.plant_id} from {request.start_date} to {request.end_date}",
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
