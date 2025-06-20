@@ -322,7 +322,7 @@ class SimplifiedInvestigationService:
                 )
 
                 # Check for workorder agent requests
-                await self._handle_sub_agent_requests(investigation.id, event)
+                # await self._handle_sub_agent_requests(investigation.id, event) #TODO: if got time
 
                 # Broadcast real-time updates
                 await self._broadcast_event(investigation.id, event)
