@@ -44,12 +44,20 @@ export class InvestigationService {
      * Get list of all investigations with pagination
      */
     getInvestigations(page: number = 1, size: number = 10): Observable<InvestigationListResponse> {
+        // Convert page/size to limit/offset for backend
+        const offset = (page - 1) * size;
         const params = new HttpParams()
-            .set('page', page.toString())
-            .set('size', size.toString());
+            .set('limit', size.toString())
+            .set('offset', offset.toString());
 
-        return this.http.get<InvestigationListResponse>(this.baseUrl, { params })
+        return this.http.get<Investigation[]>(this.baseUrl, { params })
             .pipe(
+                map(investigations => ({
+                    investigations: investigations,
+                    total: investigations.length,
+                    page: page,
+                    size: size
+                } as InvestigationListResponse)),
                 catchError(this.handleError)
             );
     }

@@ -424,6 +424,8 @@ class SimplifiedInvestigationService:
                         "created_at": datetime.now().isoformat(),
                     }
                 )
+
+                # ADK best practice: Update state directly, let ADK persist
                 session.state["workorders"] = workorders
 
             # Broadcast workorder completion
@@ -495,6 +497,8 @@ class SimplifiedInvestigationService:
                         "created_at": datetime.now().isoformat(),
                     }
                 )
+
+                # ADK best practice: Update state directly, let ADK persist
                 session.state["workorders"] = workorders
 
             # Broadcast manual workorder creation
@@ -635,7 +639,7 @@ class SimplifiedInvestigationService:
         status: InvestigationStatus,
         error_message: Optional[str] = None,
     ):
-        """Update investigation status using ADK session state"""
+        """Update investigation status using proper ADK event pattern"""
         try:
             session_id = self._get_session_id(investigation_id)
             session = await self.session_service.get_session(
@@ -645,13 +649,18 @@ class SimplifiedInvestigationService:
             )
 
             if session:
-                # Update state directly (ADK will handle persistence)
+                # According to ADK docs, update session state directly
+                # The session service handles persistence automatically
                 session.state["status"] = status.value
                 session.state["updated_at"] = datetime.now().isoformat()
                 if error_message:
                     session.state["error_message"] = error_message
                 if status == InvestigationStatus.COMPLETED:
                     session.state["completed_at"] = datetime.now().isoformat()
+
+                logger.info(
+                    f"Updated investigation {investigation_id} status to {status.value}"
+                )
 
                 # Queue status update for SSE
                 await self._queue_sse_event(
@@ -769,14 +778,14 @@ class SimplifiedInvestigationService:
         user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
 
         # Create RunConfig for SSE streaming (word-by-word)
-        run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
+        # run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
 
         final_response = ""
         async for event in runner.run_async(
             user_id=self.default_user_id,
             session_id=session_id,
             new_message=user_content,
-            run_config=run_config,
+            # run_config=run_config,
         ):
             # Check for workorder agent requests
             await self._handle_sub_agent_requests(investigation_id, event)
@@ -824,6 +833,8 @@ class SimplifiedInvestigationService:
                         "timestamp": datetime.now().isoformat(),
                     }
                 )
+
+                # ADK best practice: Update state directly, let ADK persist
                 session.state["thinking_messages"] = thinking_messages
 
                 logger.info(
