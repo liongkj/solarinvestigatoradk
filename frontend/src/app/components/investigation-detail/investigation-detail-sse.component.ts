@@ -358,6 +358,12 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     this.loadWorkorders();
                     break;
 
+                case 'investigation_deleted':
+                    console.log('🗑️ Investigation deleted:', event.message);
+                    // Navigate back to dashboard since this investigation no longer exists
+                    this.router.navigate(['/']);
+                    break;
+
                 case 'heartbeat':
                     console.log('💓 SSE heartbeat received');
                     break;

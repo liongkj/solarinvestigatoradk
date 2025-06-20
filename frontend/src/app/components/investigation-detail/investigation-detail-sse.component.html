@@ -164,7 +164,7 @@
                                         [class.bg-primary]="event.type === 'workorder_status'"
                                         [class.bg-dark]="event.type === 'completion'"
                                         [class.bg-secondary]="event.type === 'heartbeat'"
-                                        [class.bg-danger]="event.type === 'error'">
+                                        [class.bg-danger]="event.type === 'error' || event.type === 'investigation_deleted'">
                                         {{ event.type }}
                                     </span>
                                     <small class="text-muted">{{ formatTimestamp(event.timestamp) }}</small>

@@ -17,7 +17,7 @@ import {
 
 // SSE Event types
 export interface SSEEvent {
-    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'heartbeat' | 'error' | 'status';
+    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'investigation_deleted' | 'heartbeat' | 'error' | 'status';
     investigation_id: string;
     timestamp: string;
     message?: any;

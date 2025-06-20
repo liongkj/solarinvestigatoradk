@@ -621,6 +621,17 @@ class SimplifiedInvestigationService:
             if investigation_id in self.active_runners:
                 del self.active_runners[investigation_id]
 
+            # Broadcast deletion event before actually deleting
+            await self._queue_sse_event(
+                investigation_id,
+                {
+                    "type": "investigation_deleted",
+                    "investigation_id": investigation_id,
+                    "message": "Investigation has been deleted",
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+
             # Delete ADK session
             await self.session_service.delete_session(
                 app_name=self.app_name,
@@ -628,6 +639,11 @@ class SimplifiedInvestigationService:
                 session_id=session_id,
             )
 
+            # Clean up event queue for this investigation
+            if investigation_id in self.event_queues:
+                del self.event_queues[investigation_id]
+
+            logger.info(f"Successfully deleted investigation {investigation_id}")
             return True
         except Exception as e:
             logger.error(f"Error deleting investigation: {e}")

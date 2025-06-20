@@ -144,7 +144,7 @@ async def delete_investigation(
                 status_code=404,
                 detail="Investigation not found or could not be deleted",
             )
-        return {"message": "Investigation deleted successfully"}
+        return {"success": True, "message": "Investigation deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
