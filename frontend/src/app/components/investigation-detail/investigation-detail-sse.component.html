@@ -100,11 +100,11 @@
                             </button>
                         </div>
                         <div class="card-body">
-                            <div *ngIf="workorders.length === 0" class="text-muted text-center py-3">
+                            <div *ngIf="(workorders$ | async)?.length === 0" class="text-muted text-center py-3">
                                 <i class="fas fa-clipboard-list fa-2x mb-2"></i>
                                 <p>No workorders yet</p>
                             </div>
-                            <div *ngFor="let workorder of workorders" class="border rounded p-3 mb-2">
+                            <div *ngFor="let workorder of workorders$ | async" class="border rounded p-3 mb-2">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
                                         <strong>{{ workorder.type | titlecase }}</strong>
@@ -125,16 +125,38 @@
                     <div class="card mb-4">
                         <div class="card-header">
                             <h5 class="card-title mb-0">Real-time Events</h5>
-                            <small class="text-muted">Latest {{ realTimeEvents.length }} events</small>
+                            <small class="text-muted">Latest {{ (realTimeEvents$ | async)?.length || 0 }} events</small>
+                            <!-- Enhanced Debug Info -->
+                            <div class="alert alert-info mt-2">
+                                <strong>🔬 Debug Info:</strong><br>
+                                Events count: {{ (realTimeEvents$ | async)?.length || 'loading...' }}<br>
+                                SSE Connected: {{ sseSubscription ? '✅ Yes' : '❌ No' }}<br>
+                                Time: {{ getCurrentTime() }}<br>
+                                <!-- Debug buttons -->
+                                <div class="mt-2">
+                                    <button class="btn btn-sm btn-warning me-2" (click)="debugObservableState()">
+                                        🔍 Debug State
+                                    </button>
+                                    <button class="btn btn-sm btn-info" (click)="simulateSSEEvent()">
+                                        🧪 Test SSE
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                         <div class="card-body" style="max-height: 300px; overflow-y: auto;">
-                            <div *ngIf="realTimeEvents.length === 0" class="text-muted text-center py-3">
+                            <!-- Test immediate values -->
+                            <div *ngIf="(realTimeEvents$ | async) as events" class="mb-3">
+                                <div class="badge bg-primary">Async pipe working! Events: {{ events.length }}</div>
+                            </div>
+
+                            <div *ngIf="(realTimeEvents$ | async)?.length === 0" class="text-muted text-center py-3">
                                 <i class="fas fa-broadcast-tower fa-2x mb-2"></i>
                                 <p>Waiting for events...</p>
                                 <small *ngIf="sseSubscription" class="text-success">SSE stream active</small>
                                 <small *ngIf="!sseSubscription" class="text-warning">SSE not connected</small>
                             </div>
-                            <div *ngFor="let event of realTimeEvents" class="border-start border-primary ps-3 mb-2">
+                            <div *ngFor="let event of realTimeEvents$ | async"
+                                class="border-start border-primary ps-3 mb-2">
                                 <div class="d-flex justify-content-between">
                                     <span class="badge" [class.bg-info]="event.type === 'message'"
                                         [class.bg-warning]="event.type === 'ui_update'"
@@ -177,12 +199,27 @@
                             </div>
                         </div>
                         <div class="card-body chat-container" style="height: 600px; overflow-y: auto;">
-                            <div *ngIf="getVisibleMessages().length === 0" class="text-center text-muted py-5">
+                            <!-- Enhanced Debug for messages -->
+                            <div class="alert alert-warning mb-3">
+                                <strong>💬 Chat Debug:</strong><br>
+                                Raw messages: {{ (chatMessages$ | async)?.length || 'loading...' }}<br>
+                                Visible messages: {{ (visibleMessages$ | async)?.length || 'loading...' }}<br>
+                                Show all thoughts: {{ showAllThoughts }}<br>
+                                Time: {{ getCurrentTime() }}
+                            </div>
+
+                            <!-- Test if async pipe works for messages -->
+                            <div *ngIf="(visibleMessages$ | async) as visibleMessages" class="mb-3">
+                                <div class="badge bg-success">Async pipe working! Visible: {{ visibleMessages.length }}
+                                </div>
+                            </div>
+
+                            <div *ngIf="(visibleMessages$ | async)?.length === 0" class="text-center text-muted py-5">
                                 <i class="fas fa-comments fa-3x mb-3"></i>
                                 <p>No messages yet. The investigation will start soon...</p>
                             </div>
 
-                            <div *ngFor="let message of getVisibleMessages()" class="message mb-3 p-3 rounded"
+                            <div *ngFor="let message of visibleMessages$ | async" class="message mb-3 p-3 rounded"
                                 [class]="getMessageTypeClass(message.message_type)">
 
                                 <div class="message-header d-flex justify-content-between align-items-center mb-2">

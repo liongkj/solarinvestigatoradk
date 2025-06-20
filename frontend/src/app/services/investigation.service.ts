@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpParams, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, Subject, BehaviorSubject } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -17,7 +17,7 @@ import {
 
 // SSE Event types
 export interface SSEEvent {
-    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'heartbeat' | 'error';
+    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'heartbeat' | 'error' | 'status';
     investigation_id: string;
     timestamp: string;
     message?: any;
@@ -38,7 +38,7 @@ export class InvestigationService {
     private sseStreams: Map<string, EventSource> = new Map();
     private eventSubjects: Map<string, Subject<SSEEvent>> = new Map();
 
-    constructor(private http: HttpClient) { }
+    constructor(private http: HttpClient, private ngZone: NgZone) { }
 
     /**
      * Get list of all investigations with pagination
@@ -210,20 +210,25 @@ export class InvestigationService {
         const eventSource = new EventSource(`${this.baseUrl}${investigationId}/stream`);
         this.sseStreams.set(investigationId, eventSource);
 
-        // Handle SSE events
+        // Handle SSE events - ensure they run inside Angular's zone
         eventSource.onmessage = (event) => {
-            try {
-                const data: SSEEvent = JSON.parse(event.data);
-                eventSubject.next(data);
-            } catch (error) {
-                console.error('Error parsing SSE event:', error);
-            }
+            this.ngZone.run(() => {
+                try {
+                    const data: SSEEvent = JSON.parse(event.data);
+                    console.log('🌐 SSE Event parsed in service (in zone):', data);
+                    eventSubject.next(data);
+                } catch (error) {
+                    console.error('Error parsing SSE event:', error);
+                }
+            });
         };
 
         eventSource.onerror = (error) => {
-            console.error('SSE connection error:', error);
-            eventSubject.error(error);
-            this.stopInvestigationStream(investigationId);
+            this.ngZone.run(() => {
+                console.error('SSE connection error:', error);
+                eventSubject.error(error);
+                this.stopInvestigationStream(investigationId);
+            });
         };
 
         return eventSubject.asObservable();

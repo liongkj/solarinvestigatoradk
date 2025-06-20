@@ -41,6 +41,10 @@ uv add google-adk-python
 3. Use `pydantic` for data validation
 4. When encounter with google adk, gemini, or any other agent development, use mcp server to find the documentation
 
+## Angular
+1. Use RxJS for state management
+2. Avoild using ChangeRefDectector at all cost, by rightly using RxJS and Angular's async pipe
+
 <google-sdk-schema>
 ```
 sqlite3 solar_investigation_data.db ".tables"

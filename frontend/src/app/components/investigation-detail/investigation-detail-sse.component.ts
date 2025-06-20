@@ -1,9 +1,10 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { interval, Subscription, Subject, of } from 'rxjs';
-import { takeUntil, switchMap, catchError, finalize } from 'rxjs/operators';
+import { interval, Subscription, Subject, of, BehaviorSubject, Observable } from 'rxjs';
+import { takeUntil, switchMap, catchError, finalize, tap, observeOn, map, shareReplay } from 'rxjs/operators';
+import { asapScheduler } from 'rxjs';
 import { InvestigationService, SSEEvent } from '../../services/investigation.service';
 import { Investigation, AgentMessage, InvestigationStatus, AgentMessageType } from '../../models/investigation';
 
@@ -18,19 +19,48 @@ interface ProgressStep {
     standalone: true,
     imports: [CommonModule, FormsModule, RouterLink],
     templateUrl: './investigation-detail-sse.component.html',
-    styleUrls: ['./investigation-detail.component.css']
+    styleUrls: ['./investigation-detail.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class InvestigationDetailComponent implements OnInit, OnDestroy {
     investigation: Investigation | null = null;
     investigationId: string = '';
     isLoading = false;
     error: string | null = null;
-    chatMessages: AgentMessage[] = [];
     showAllThoughts = false;
 
-    // Real-time updates via SSE
-    realTimeEvents: SSEEvent[] = [];
-    workorders: any[] = [];
+    // Private BehaviorSubjects for internal state management
+    private realTimeEventsSubject = new BehaviorSubject<SSEEvent[]>([]);
+    private chatMessagesSubject = new BehaviorSubject<AgentMessage[]>([]);
+    private workordersSubject = new BehaviorSubject<any[]>([]);
+
+    // Public observables for template consumption - use asObservable() to prevent external modification
+    public readonly realTimeEvents$ = this.realTimeEventsSubject.asObservable().pipe(
+        tap(events => console.log('realTimeEvents$ emitting:', events.length, 'events')),
+        shareReplay(1)
+    );
+
+    public readonly chatMessages$ = this.chatMessagesSubject.asObservable().pipe(
+        tap(messages => console.log('chatMessages$ emitting:', messages.length, 'messages')),
+        shareReplay(1)
+    );
+
+    public readonly workorders$ = this.workordersSubject.asObservable().pipe(
+        tap(workorders => console.log('workorders$ emitting:', workorders.length, 'workorders')),
+        shareReplay(1)
+    );
+
+    // Computed observables
+    public readonly visibleMessages$ = this.chatMessages$.pipe(
+        map(messages => {
+            console.log('Computing visibleMessages, total messages:', messages.length);
+            const filtered = messages.filter(msg => this.shouldShowMessage(msg));
+            console.log('Filtered messages:', filtered.length);
+            return filtered;
+        }),
+        tap(visible => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
+        shareReplay(1)
+    );
 
     // Subscriptions
     private refreshSubscription: Subscription | null = null;
@@ -54,7 +84,9 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     constructor(
         private route: ActivatedRoute,
         private router: Router,
-        private investigationService: InvestigationService
+        private investigationService: InvestigationService,
+        private cdr: ChangeDetectorRef,
+        private ngZone: NgZone
     ) { }
 
     ngOnInit(): void {
@@ -64,6 +96,23 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             this.error = 'Invalid investigation ID';
             return;
         }
+
+        // Debug: Subscribe to our observables to see if they're emitting
+        this.realTimeEvents$.pipe(takeUntil(this.destroy$)).subscribe(events => {
+            console.log('🔥 realTimeEvents$ observable emitted to subscriber:', events.length, 'events');
+        });
+
+        this.chatMessages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
+            console.log('💬 chatMessages$ observable emitted to subscriber:', messages.length, 'messages');
+        });
+
+        this.visibleMessages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
+            console.log('👁️ visibleMessages$ observable emitted to subscriber:', messages.length, 'visible messages');
+        });
+
+        this.workorders$.pipe(takeUntil(this.destroy$)).subscribe(workorders => {
+            console.log('📋 workorders$ observable emitted to subscriber:', workorders.length, 'workorders');
+        });
 
         this.loadInvestigationDetails();
         this.setupSSEStream();
@@ -75,6 +124,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         this.destroy$.complete();
         this.closeSSEStream();
         this.stopStatusRefresh();
+
+        // Clean up reactive streams
+        this.realTimeEventsSubject.complete();
+        this.chatMessagesSubject.complete();
+        this.workordersSubject.complete();
     }
 
     loadInvestigationDetails(): void {
@@ -109,14 +163,17 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             catchError(error => {
                 console.error('Error loading chat messages:', error);
                 return of([]);
-            })
-        ).subscribe(response => {
-            if (Array.isArray(response)) {
-                this.chatMessages = response;
-            } else {
-                this.chatMessages = response.messages || [];
-            }
-        });
+            })).subscribe(response => {
+                let messages: AgentMessage[] = [];
+                if (Array.isArray(response)) {
+                    messages = response;
+                } else {
+                    messages = response.messages || [];
+                }
+
+                console.log('Initial chat messages loaded:', messages.length);
+                this.chatMessagesSubject.next(messages);
+            });
     }
 
     private updateProgressSteps(): void {
@@ -192,10 +249,15 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         console.log('Starting SSE stream for investigation:', this.investigationId);
 
         this.sseSubscription = this.investigationService.startInvestigationStream(this.investigationId)
-            .pipe(takeUntil(this.destroy$))
+            .pipe(
+                takeUntil(this.destroy$),
+                observeOn(asapScheduler), // Ensure updates happen in Angular zone
+                tap((event: SSEEvent) => {
+                    console.log('SSE event received:', event);
+                })
+            )
             .subscribe({
                 next: (event: SSEEvent) => {
-                    console.log('SSE event received:', event);
                     this.handleSSEEvent(event);
                 },
                 error: (error) => {
@@ -214,73 +276,105 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     }
 
     private handleSSEEvent(event: SSEEvent): void {
-        // Add to real-time events log
-        this.realTimeEvents.unshift(event);
+        // Ensure we're in Angular's zone for proper change detection
+        this.ngZone.run(() => {
+            console.log('🔥 SSE Event received in Angular zone:', event);
 
-        // Keep only last 50 events
-        if (this.realTimeEvents.length > 50) {
-            this.realTimeEvents = this.realTimeEvents.slice(0, 50);
-        }
+            // Add to real-time events log using reactive stream
+            const currentEvents = this.realTimeEventsSubject.value;
+            const newEvents = [event, ...currentEvents.slice(0, 49)];
+            this.realTimeEventsSubject.next(newEvents);
 
-        switch (event.type) {
-            case 'connected':
-                console.log('SSE stream connected:', event.message);
-                break;
+            console.log('📊 Updated realTimeEventsSubject:', newEvents.length, 'events');
+            console.log('📊 Current BehaviorSubject value:', this.realTimeEventsSubject.value.length);
 
-            case 'investigation_started':
-                console.log('Investigation processing started:', event.message);
-                break;
+            switch (event.type) {
+                case 'connected':
+                    console.log('✅ SSE stream connected:', event.message);
+                    break;
 
-            case 'message':
-                if (event.message) {
-                    // Add new message to chat
-                    this.chatMessages.push({
-                        id: event.message.id,
-                        investigation_id: this.investigationId,
-                        message_type: event.message.message_type,
-                        content: event.message.content,
-                        timestamp: event.message.timestamp,
-                        metadata: {}
-                    });
-                }
-                break;
+                case 'investigation_started':
+                    console.log('🚀 Investigation processing started:', event.message);
+                    break;
 
-            case 'ui_update':
-                if (event.ui_summary) {
-                    // Cache UI summary for display
-                    this.uiSummaryCache.set(event.investigation_id, event.ui_summary);
-                }
-                break;
+                case 'message':
+                    if (event.message) {
+                        // Add new message to chat using reactive stream
+                        const currentMessages = this.chatMessagesSubject.value;
+                        const newMessages = [...currentMessages, {
+                            id: event.message.id,
+                            investigation_id: this.investigationId,
+                            message_type: event.message.message_type,
+                            content: event.message.content,
+                            timestamp: event.message.timestamp,
+                            metadata: {}
+                        }];
+                        this.chatMessagesSubject.next(newMessages);
+                        console.log('💬 Updated chatMessagesSubject:', newMessages.length, 'messages');
+                    }
+                    break;
 
-            case 'status_update':
-                console.log('Status update received:', event.status);
-                // Reload investigation details to get updated status
-                this.loadInvestigationDetails();
-                break;
+                case 'ui_update':
+                    if (event.ui_summary) {
+                        // Cache UI summary for display
+                        this.uiSummaryCache.set(event.investigation_id, event.ui_summary);
+                    }
+                    break;
 
-            case 'completion':
-                console.log('Investigation completed:', event.status, event.result);
-                // Reload investigation details to get final status
-                this.loadInvestigationDetails();
-                break;
+                case 'status_update':
+                    console.log('📈 Status update received:', event.status);
+                    // Update status directly without reloading the entire investigation
+                    if (this.investigation && event.status) {
+                        this.investigation.status = event.status as InvestigationStatus;
+                        this.updateProgressSteps();
+                    }
+                    break;
 
-            case 'workorder_status':
-                // Reload workorders
-                this.loadWorkorders();
-                break;
+                case 'completion':
+                    console.log('🏁 Investigation completed:', event.status, event.result);
+                    // Update status and reload only if not already completed
+                    if (this.investigation && event.status) {
+                        this.investigation.status = event.status as InvestigationStatus;
+                        this.updateProgressSteps();
+                        // Only reload if we need fresh data (e.g., final results)
+                        if (event.status === 'completed') {
+                            this.loadInvestigationDetailsSilently();
+                        }
+                    }
+                    break;
 
-            case 'heartbeat':
-                console.log('SSE heartbeat received');
-                break;
+                case 'status':
+                    console.log('📊 Investigation status event:', event.status);
+                    // Update status directly if different
+                    if (this.investigation && event.status && event.status !== this.investigation.status) {
+                        this.investigation.status = event.status as InvestigationStatus;
+                        this.updateProgressSteps();
+                    }
+                    break;
 
-            case 'error':
-                console.error('SSE error event:', event.error);
-                this.error = event.error || 'Unknown error occurred';
-                break;
+                case 'workorder_status':
+                    console.log('📋 Workorder status event:', event.status, event.message);
+                    // Reload workorders to show updated status
+                    this.loadWorkorders();
+                    break;
 
-            default:
-                console.log('Unknown SSE event type:', event.type, event);
-        }
+                case 'heartbeat':
+                    console.log('💓 SSE heartbeat received');
+                    break;
+
+                case 'error':
+                    console.error('❌ SSE error event:', event.error);
+                    this.error = event.error || 'Unknown error occurred';
+                    break;
+
+                default:
+                    console.log('❓ Unknown SSE event type:', event.type, event);
+                    break;
+            }
+
+            // Manually trigger change detection with OnPush strategy
+            this.cdr.markForCheck();
+        });
     }
 
     private closeSSEStream(): void {
@@ -302,7 +396,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (workorders) => {
-                    this.workorders = workorders;
+                    this.workordersSubject.next(workorders);
                 },
                 error: (error) => {
                     console.error('Error loading workorders:', error);
@@ -379,12 +473,39 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return message.message_type !== AgentMessageType.THINKING;
     }
 
-    getVisibleMessages(): AgentMessage[] {
-        return this.chatMessages.filter(msg => this.shouldShowMessage(msg));
-    }
-
     formatTimestamp(timestamp: string): string {
         return new Date(timestamp).toLocaleString();
+    }
+
+    // Debug methods to help track UI updates
+    getCurrentTime(): string {
+        return new Date().toLocaleTimeString();
+    }
+
+    debugObservableState(): void {
+        console.log('🔍 Debug Observable State:');
+        console.log('realTimeEvents count:', this.realTimeEventsSubject.value.length);
+        console.log('chatMessages count:', this.chatMessagesSubject.value.length);
+        console.log('workorders count:', this.workordersSubject.value.length);
+        console.log('SSE subscription active:', !!this.sseSubscription);
+    }
+
+    // Test method to simulate SSE events for debugging
+    simulateSSEEvent(): void {
+        const testEvent: SSEEvent = {
+            type: 'message',
+            investigation_id: this.investigationId,
+            timestamp: new Date().toISOString(),
+            message: {
+                id: 'test-' + Date.now(),
+                message_type: 'agent_response',
+                content: 'This is a test message to verify UI updates - ' + new Date().toLocaleTimeString(),
+                timestamp: new Date().toISOString()
+            }
+        };
+
+        console.log('🧪 Simulating SSE event:', testEvent);
+        this.handleSSEEvent(testEvent);
     }
 
     getStatusClass(): string {
@@ -440,5 +561,22 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     toggleContentDisplay(): void {
         this.showUiSummaries = !this.showUiSummaries;
+    }
+
+    loadInvestigationDetailsSilently(): void {
+        // Load investigation details without showing loading spinner
+        this.investigationService.getInvestigation(this.investigationId).pipe(
+            takeUntil(this.destroy$),
+            catchError(error => {
+                console.error('Error loading investigation details silently:', error);
+                return of(null);
+            })
+        ).subscribe(investigation => {
+            if (investigation) {
+                console.log('Investigation updated silently:', investigation);
+                this.investigation = investigation;
+                this.updateProgressSteps();
+            }
+        });
     }
 }

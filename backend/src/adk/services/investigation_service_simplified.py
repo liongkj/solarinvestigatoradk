@@ -6,6 +6,7 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
+from google.genai.adk import RunConfig, StreamingMode
 from google.genai import types
 
 from adk.agents.solar_investigation_agent import get_solar_investigation_agent
@@ -300,6 +301,9 @@ class SimplifiedInvestigationService:
                 role="user", parts=[types.Part(text=initial_prompt)]
             )
 
+            # Create RunConfig for SSE streaming (word-by-word)
+            run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
+
             # Process with ADK (handles events, state, callbacks automatically)
             final_response = None
             event_count = 0
@@ -307,6 +311,7 @@ class SimplifiedInvestigationService:
                 user_id=self.default_user_id,
                 session_id=session_id,
                 new_message=user_content,
+                run_config=run_config,
             ):
                 event_count += 1
                 logger.info(
@@ -758,11 +763,15 @@ class SimplifiedInvestigationService:
         session_id = self._get_session_id(investigation_id)
         user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
 
+        # Create RunConfig for SSE streaming (word-by-word)
+        run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
+
         final_response = ""
         async for event in runner.run_async(
             user_id=self.default_user_id,
             session_id=session_id,
             new_message=user_content,
+            run_config=run_config,
         ):
             # Check for workorder agent requests
             await self._handle_sub_agent_requests(investigation_id, event)
