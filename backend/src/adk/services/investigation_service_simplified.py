@@ -324,8 +324,8 @@ class SimplifiedInvestigationService:
                 # Check for workorder agent requests
                 # await self._handle_sub_agent_requests(investigation.id, event) #TODO: if got time
 
-                # Broadcast real-time updates
-                await self._broadcast_event(investigation.id, event)
+                # Handle streaming events for real-time updates
+                await self._handle_streaming_event(investigation.id, event)
 
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or ""
@@ -806,7 +806,8 @@ class SimplifiedInvestigationService:
             # Check for workorder agent requests
             await self._handle_sub_agent_requests(investigation_id, event)
 
-            await self._broadcast_event(investigation_id, event)
+            # Handle streaming events for real-time updates
+            await self._handle_streaming_event(investigation_id, event)
 
             if event.is_final_response() and event.content and event.content.parts:
                 final_response = event.content.parts[0].text or ""
@@ -923,6 +924,112 @@ class SimplifiedInvestigationService:
                 await self.event_queues[investigation_id].put(event_data)
             except Exception as e:
                 logger.error(f"Error queuing SSE event: {e}")
+
+    async def _handle_streaming_event(self, investigation_id: str, event):
+        """Handle ADK streaming events and broadcast to SSE clients"""
+        try:
+            # Extract event details
+            event_data = {
+                "investigation_id": investigation_id,
+                "timestamp": datetime.now().isoformat(),
+                "event_id": getattr(event, "id", None),
+                "author": getattr(event, "author", None),
+            }
+
+            # Handle different event types based on the pseudocode pattern
+            if event.content and event.content.parts:
+                if event.get_function_calls():
+                    # Tool call request
+                    event_data.update(
+                        {
+                            "type": "tool_call_request",
+                            "tool_calls": [
+                                call.name for call in event.get_function_calls()
+                            ],
+                            "partial": False,
+                        }
+                    )
+                elif event.get_function_responses():
+                    # Tool result
+                    event_data.update(
+                        {
+                            "type": "tool_result",
+                            "tool_responses": len(event.get_function_responses()),
+                            "partial": False,
+                        }
+                    )
+                elif event.content.parts[0].text:
+                    # Text message - check if streaming or complete
+                    text_content = event.content.parts[0].text
+                    is_partial = getattr(event, "partial", False)
+
+                    if is_partial:
+                        event_data.update(
+                            {
+                                "type": "streaming_text_chunk",
+                                "content": text_content,
+                                "partial": True,
+                            }
+                        )
+                    else:
+                        event_data.update(
+                            {
+                                "type": "complete_text_message",
+                                "content": text_content,
+                                "partial": False,
+                            }
+                        )
+                else:
+                    # Other content (code result, etc.)
+                    event_data.update(
+                        {
+                            "type": "other_content",
+                            "content_type": type(event.content.parts[0]).__name__,
+                            "partial": False,
+                        }
+                    )
+            elif event.actions and (
+                event.actions.state_delta or event.actions.artifact_delta
+            ):
+                # State/Artifact Update
+                event_data.update(
+                    {
+                        "type": "state_artifact_update",
+                        "has_state_delta": bool(event.actions.state_delta),
+                        "has_artifact_delta": bool(event.actions.artifact_delta),
+                        "partial": False,
+                    }
+                )
+            else:
+                # Control signal or other
+                event_data.update(
+                    {
+                        "type": "control_signal",
+                        "turn_complete": getattr(event, "turn_complete", None),
+                        "partial": False,
+                    }
+                )
+
+            # Queue the event for SSE streaming
+            await self._queue_sse_event(investigation_id, event_data)
+
+            logger.debug(
+                f"Streamed event type: {event_data['type']} for investigation {investigation_id}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Error handling streaming event for investigation {investigation_id}: {e}"
+            )
+            # Send error event
+            error_event = {
+                "type": "streaming_error",
+                "investigation_id": investigation_id,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
+                "partial": False,
+            }
+            await self._queue_sse_event(investigation_id, error_event)
 
 
 # Singleton instance

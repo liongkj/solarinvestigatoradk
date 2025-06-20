@@ -17,9 +17,20 @@ import {
 
 // SSE Event types
 export interface SSEEvent {
-    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'investigation_deleted' | 'heartbeat' | 'error' | 'status';
+    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'investigation_deleted' | 'heartbeat' | 'error' | 'status' |
+    'streaming_text_chunk' | 'complete_text_message' | 'tool_call_request' | 'tool_result' | 'other_content' | 'state_artifact_update' | 'control_signal' | 'streaming_error';
     investigation_id: string;
     timestamp: string;
+    event_id?: string;
+    author?: string;
+    content?: string;
+    partial?: boolean;
+    turn_complete?: boolean;
+    tool_calls?: string[];
+    tool_responses?: number;
+    content_type?: string;
+    has_state_delta?: boolean;
+    has_artifact_delta?: boolean;
     message?: any;
     ui_summary?: string;
     full_content?: string;
@@ -37,6 +48,9 @@ export class InvestigationService {
     // SSE event streams by investigation ID
     private sseStreams: Map<string, EventSource> = new Map();
     private eventSubjects: Map<string, Subject<SSEEvent>> = new Map();
+
+    // Streaming text accumulator
+    private streamingTextAccumulator: Map<string, BehaviorSubject<string>> = new Map();
 
     constructor(private http: HttpClient, private ngZone: NgZone) { }
 
@@ -224,6 +238,10 @@ export class InvestigationService {
                 try {
                     const data: SSEEvent = JSON.parse(event.data);
                     console.log('🌐 SSE Event parsed in service (in zone):', data);
+
+                    // Process streaming events for text accumulation
+                    this.processStreamingEvent(data);
+
                     eventSubject.next(data);
                 } catch (error) {
                     console.error('Error parsing SSE event:', error);
@@ -259,6 +277,9 @@ export class InvestigationService {
             eventSubject.complete();
             this.eventSubjects.delete(investigationId);
         }
+
+        // Reset streaming text accumulator
+        this.resetStreamingText(investigationId);
     }
 
     /**
@@ -284,5 +305,49 @@ export class InvestigationService {
     getWorkorders(investigationId: string): Observable<any[]> {
         return this.http.get<any[]>(`${this.baseUrl}${investigationId}/workorders`)
             .pipe(catchError(this.handleError));
+    }
+
+    /**
+     * Get streaming text accumulator for an investigation
+     */
+    getStreamingText(investigationId: string): Observable<string> {
+        if (!this.streamingTextAccumulator.has(investigationId)) {
+            this.streamingTextAccumulator.set(investigationId, new BehaviorSubject<string>(''));
+        }
+        return this.streamingTextAccumulator.get(investigationId)!.asObservable();
+    }
+
+    /**
+     * Reset streaming text accumulator for an investigation
+     */
+    resetStreamingText(investigationId: string): void {
+        if (this.streamingTextAccumulator.has(investigationId)) {
+            this.streamingTextAccumulator.get(investigationId)!.next('');
+        }
+    }
+
+    /**
+     * Process streaming events and accumulate text chunks
+     */
+    private processStreamingEvent(event: SSEEvent): void {
+        if (event.type === 'streaming_text_chunk' && event.content && event.partial) {
+            // Accumulate streaming text chunks
+            if (!this.streamingTextAccumulator.has(event.investigation_id)) {
+                this.streamingTextAccumulator.set(event.investigation_id, new BehaviorSubject<string>(''));
+            }
+
+            const current = this.streamingTextAccumulator.get(event.investigation_id)!.getValue();
+            const updated = current + event.content;
+            this.streamingTextAccumulator.get(event.investigation_id)!.next(updated);
+        } else if (event.type === 'complete_text_message' && !event.partial) {
+            // Final complete message - could either replace or finalize accumulated text
+            if (!this.streamingTextAccumulator.has(event.investigation_id)) {
+                this.streamingTextAccumulator.set(event.investigation_id, new BehaviorSubject<string>(''));
+            }
+
+            if (event.content) {
+                this.streamingTextAccumulator.get(event.investigation_id)!.next(event.content);
+            }
+        }
     }
 }
