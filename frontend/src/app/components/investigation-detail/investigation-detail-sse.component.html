@@ -121,61 +121,6 @@
                         </div>
                     </div>
 
-                    <!-- Real-time Events Card (Debug) -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">Real-time Events</h5>
-                            <small class="text-muted">Latest {{ (realTimeEvents$ | async)?.length || 0 }} events</small>
-                            <!-- Enhanced Debug Info -->
-                            <div class="alert alert-info mt-2">
-                                <strong>🔬 Debug Info:</strong><br>
-                                Events count: {{ (realTimeEvents$ | async)?.length || 'loading...' }}<br>
-                                SSE Connected: {{ sseSubscription ? '✅ Yes' : '❌ No' }}<br>
-                                Time: {{ getCurrentTime() }}<br>
-                                <!-- Debug buttons -->
-                                <div class="mt-2">
-                                    <button class="btn btn-sm btn-warning me-2" (click)="debugObservableState()">
-                                        🔍 Debug State
-                                    </button>
-                                    <button class="btn btn-sm btn-info" (click)="simulateSSEEvent()">
-                                        🧪 Test SSE
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-body" style="max-height: 300px; overflow-y: auto;">
-                            <!-- Test immediate values -->
-                            <div *ngIf="(realTimeEvents$ | async) as events" class="mb-3">
-                                <div class="badge bg-primary">Async pipe working! Events: {{ events.length }}</div>
-                            </div>
-
-                            <div *ngIf="(realTimeEvents$ | async)?.length === 0" class="text-muted text-center py-3">
-                                <i class="fas fa-broadcast-tower fa-2x mb-2"></i>
-                                <p>Waiting for events...</p>
-                                <small *ngIf="sseSubscription" class="text-success">SSE stream active</small>
-                                <small *ngIf="!sseSubscription" class="text-warning">SSE not connected</small>
-                            </div>
-                            <div *ngFor="let event of realTimeEvents$ | async"
-                                class="border-start border-primary ps-3 mb-2">
-                                <div class="d-flex justify-content-between">
-                                    <span class="badge" [class.bg-info]="event.type === 'message'"
-                                        [class.bg-warning]="event.type === 'ui_update'"
-                                        [class.bg-success]="event.type === 'status_update' || event.type === 'connected' || event.type === 'investigation_started'"
-                                        [class.bg-primary]="event.type === 'workorder_status'"
-                                        [class.bg-dark]="event.type === 'completion'"
-                                        [class.bg-secondary]="event.type === 'heartbeat'"
-                                        [class.bg-danger]="event.type === 'error' || event.type === 'investigation_deleted'">
-                                        {{ event.type }}
-                                    </span>
-                                    <small class="text-muted">{{ formatTimestamp(event.timestamp) }}</small>
-                                </div>
-                                <small class="text-muted d-block mt-1">
-                                    {{ event.message?.content || event.status || event.error || event.message || 'Event
-                                    received' }}
-                                </small>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Right Column: Chat Messages -->
@@ -198,95 +143,128 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="card-body chat-container" style="overflow-y: auto;">
+                        <div class="card-body chat-container">
 
-                            <!-- Streaming Text Display Card -->
-                            <div *ngIf="isStreaming || currentStreamingText" class="alert alert-info mb-4">
-                                <div class="d-flex align-items-start">
-                                    <div class="spinner-border spinner-border-sm text-info me-3" role="status"
-                                        *ngIf="isStreaming">
-                                        <span class="visually-hidden">Streaming...</span>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <h6 class="mb-0">
-                                                <i class="fas fa-stream me-2"></i>
-                                                <span *ngIf="isStreaming">Agent is responding...</span>
-                                                <span *ngIf="!isStreaming && currentStreamingText">Agent
-                                                    response:</span>
-                                            </h6>
-                                            <small class="text-muted" *ngIf="streamingProgress.total > 0">
-                                                Chunk {{ streamingProgress.current }}/{{ streamingProgress.total }}
+                            <!-- Messages Area -->
+                            <div class="messages-area">
+
+                                <!-- Streaming Text Display Card -->
+                                <div *ngIf="isStreaming || currentStreamingText" class="alert alert-info mb-4">
+                                    <div class="d-flex align-items-start">
+                                        <div class="spinner-border spinner-border-sm text-info me-3" role="status"
+                                            *ngIf="isStreaming">
+                                            <span class="visually-hidden">Streaming...</span>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="mb-0">
+                                                    <i class="fas fa-stream me-2"></i>
+                                                    <span *ngIf="isStreaming">Agent is responding...</span>
+                                                    <span *ngIf="!isStreaming && currentStreamingText">Agent
+                                                        response:</span>
+                                                </h6>
+                                                <small class="text-muted" *ngIf="streamingProgress.total > 0">
+                                                    Chunk {{ streamingProgress.current }}/{{ streamingProgress.total }}
+                                                </small>
+                                            </div>
+                                            <div class="progress mb-2" *ngIf="streamingProgress.total > 0"
+                                                style="height: 4px;">
+                                                <div class="progress-bar bg-info"
+                                                    [style.width.%]="(streamingProgress.current / streamingProgress.total) * 100">
+                                                </div>
+                                            </div>
+                                            <div class="streaming-text"
+                                                style="font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">
+                                                {{ currentStreamingText || 'Waiting for agent response...' }}
+                                            </div>
+                                            <small class="text-muted d-block mt-2">
+                                                Characters: {{ currentStreamingText.length || 0 }} | Investigation: {{
+                                                investigationId }}
                                             </small>
                                         </div>
-                                        <div class="progress mb-2" *ngIf="streamingProgress.total > 0"
-                                            style="height: 4px;">
-                                            <div class="progress-bar bg-info"
-                                                [style.width.%]="(streamingProgress.current / streamingProgress.total) * 100">
+                                    </div>
+                                </div>
+
+
+                                <div *ngIf="(visibleMessages$ | async)?.length === 0"
+                                    class="text-center text-muted py-5">
+                                    <i class="fas fa-comments fa-3x mb-3"></i>
+                                    <p>No messages yet. The investigation will start soon...</p>
+                                </div>
+
+                                <div *ngFor="let message of visibleMessages$ | async" class="message-card alert mb-2"
+                                    [class.alert-primary]="message.message_type === 'user'"
+                                    [class.alert-success]="message.message_type === 'agent'"
+                                    [class.alert-secondary]="message.message_type === 'system'"
+                                    [class.alert-warning]="message.message_type === 'thinking'"
+                                    [class.alert-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'">
+
+                                    <div class="d-flex align-items-start">
+                                        <!-- Message Type Icon -->
+                                        <div class="me-2">
+                                            <i class="fas fa-lg" [class.fa-user]="message.message_type === 'user'"
+                                                [class.fa-robot]="message.message_type === 'agent'"
+                                                [class.fa-cog]="message.message_type === 'system'"
+                                                [class.fa-brain]="message.message_type === 'thinking'"
+                                                [class.fa-wrench]="message.message_type === 'tool_call'"
+                                                [class.fa-check-circle]="message.message_type === 'tool_result'"
+                                                [class.text-primary]="message.message_type === 'user'"
+                                                [class.text-success]="message.message_type === 'agent'"
+                                                [class.text-secondary]="message.message_type === 'system'"
+                                                [class.text-warning]="message.message_type === 'thinking'"
+                                                [class.text-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'">
+                                            </i>
+                                        </div>
+
+                                        <div class="flex-grow-1">
+                                            <!-- Message Header -->
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <h6 class="mb-0 fs-6">
+                                                    <strong>{{ message.message_type | titlecase }}</strong>
+                                                    <span *ngIf="hasUiSummary(message)" class="badge bg-info ms-2">
+                                                        <i class="fas fa-magic"></i> Summary
+                                                    </span>
+                                                </h6>
+                                                <small class="text-muted">{{ formatTimestamp(message.timestamp)
+                                                    }}</small>
+                                            </div>
+
+                                            <!-- Message Content -->
+                                            <div class="message-content">
+                                                <div [innerHTML]="getDisplayContent(message)" class="message-text"
+                                                    style="white-space: pre-wrap; word-wrap: break-word;">
+                                                </div>
                                             </div>
                                         </div>
-                                        <div class="streaming-text"
-                                            style="font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">
-                                            {{ currentStreamingText || 'Waiting for agent response...' }}
-                                        </div>
-                                        <small class="text-muted d-block mt-2">
-                                            Characters: {{ currentStreamingText.length || 0 }} | Investigation: {{
-                                            investigationId }}
-                                        </small>
                                     </div>
                                 </div>
                             </div>
 
-
-                            <div *ngIf="(visibleMessages$ | async)?.length === 0" class="text-center text-muted py-5">
-                                <i class="fas fa-comments fa-3x mb-3"></i>
-                                <p>No messages yet. The investigation will start soon...</p>
-                            </div>
-
-                            <div *ngFor="let message of visibleMessages$ | async" class="message-card alert mb-2"
-                                [class.alert-primary]="message.message_type === 'user'"
-                                [class.alert-success]="message.message_type === 'agent'"
-                                [class.alert-secondary]="message.message_type === 'system'"
-                                [class.alert-warning]="message.message_type === 'thinking'"
-                                [class.alert-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'">
-
-                                <div class="d-flex align-items-start">
-                                    <!-- Message Type Icon -->
-                                    <div class="me-2">
-                                        <i class="fas fa-lg" [class.fa-user]="message.message_type === 'user'"
-                                            [class.fa-robot]="message.message_type === 'agent'"
-                                            [class.fa-cog]="message.message_type === 'system'"
-                                            [class.fa-brain]="message.message_type === 'thinking'"
-                                            [class.fa-wrench]="message.message_type === 'tool_call'"
-                                            [class.fa-check-circle]="message.message_type === 'tool_result'"
-                                            [class.text-primary]="message.message_type === 'user'"
-                                            [class.text-success]="message.message_type === 'agent'"
-                                            [class.text-secondary]="message.message_type === 'system'"
-                                            [class.text-warning]="message.message_type === 'thinking'"
-                                            [class.text-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'">
-                                        </i>
-                                    </div>
-
+                            <!-- Chat Input Box -->
+                            <div class="card-footer border-top bg-light p-3">
+                                <div class="d-flex gap-2">
                                     <div class="flex-grow-1">
-                                        <!-- Message Header -->
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <h6 class="mb-0 fs-6">
-                                                <strong>{{ message.message_type | titlecase }}</strong>
-                                                <span *ngIf="hasUiSummary(message)" class="badge bg-info ms-2">
-                                                    <i class="fas fa-magic"></i> Summary
-                                                </span>
-                                            </h6>
-                                            <small class="text-muted">{{ formatTimestamp(message.timestamp) }}</small>
-                                        </div>
-
-                                        <!-- Message Content -->
-                                        <div class="message-content">
-                                            <div [innerHTML]="getDisplayContent(message)" class="message-text"
-                                                style="white-space: pre-wrap; word-wrap: break-word;">
-                                            </div>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control"
+                                                placeholder="Ask a question about this investigation..."
+                                                [(ngModel)]="chatInput" (keyup.enter)="sendChatMessage()"
+                                                [disabled]="isSendingMessage">
+                                            <button class="btn btn-primary" type="button" (click)="sendChatMessage()"
+                                                [disabled]="!chatInput.trim() || isSendingMessage">
+                                                <i class="fas fa-paper-plane" *ngIf="!isSendingMessage"></i>
+                                                <div class="spinner-border spinner-border-sm" role="status"
+                                                    *ngIf="isSendingMessage">
+                                                    <span class="visually-hidden">Sending...</span>
+                                                </div>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
+                                <small class="text-muted mt-1 d-block">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Ask questions about the investigation findings, request clarifications, or get
+                                    additional analysis.
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -294,4 +272,3 @@
             </div>
         </div>
     </div>
-</div>

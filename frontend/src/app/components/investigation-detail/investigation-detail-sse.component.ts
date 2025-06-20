@@ -6,7 +6,7 @@ import { interval, Subscription, Subject, of, BehaviorSubject, Observable } from
 import { takeUntil, switchMap, catchError, finalize, tap, observeOn, map, shareReplay } from 'rxjs/operators';
 import { asapScheduler } from 'rxjs';
 import { InvestigationService, SSEEvent } from '../../services/investigation.service';
-import { Investigation, AgentMessage, InvestigationStatus, AgentMessageType } from '../../models/investigation';
+import { Investigation, AgentMessage, InvestigationStatus, AgentMessageType, MessageRequest } from '../../models/investigation';
 
 interface ProgressStep {
     name: string;
@@ -65,6 +65,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // Subscriptions
     private refreshSubscription: Subscription | null = null;
     private destroy$ = new Subject<void>();
+
+    // Chat input properties
+    public chatInput: string = '';
+    public isSendingMessage: boolean = false;
+
     private statusRefreshInterval: any = null;
     public sseSubscription: Subscription | null = null;
 
@@ -379,7 +384,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                         hasFullContent: !!event.full_content,
                         chunkInfo: event.chunk_info
                     });
-                    
+
                     // DIRECT UPDATE: Copy the same pattern as realTimeEvents
                     this.isStreaming = true;
 
@@ -408,7 +413,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                         fullLength: this.currentStreamingText.length,
                         progress: `${this.streamingProgress.current}/${this.streamingProgress.total}`
                     });
-                    
+
                     // Trigger change detection manually
                     this.cdr.detectChanges();
                     break;
@@ -422,7 +427,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                         this.currentStreamingText = event.content;
                     }
                     console.log('✅ Streaming completed - final text length:', this.currentStreamingText.length);
-                    
+
                     // Trigger change detection manually
                     this.cdr.detectChanges();
                     break;
@@ -642,6 +647,64 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 this.investigation = investigation;
                 this.updateProgressSteps();
             }
+        });
+    }
+
+    // Send chat message
+    sendChatMessage(): void {
+        if (!this.chatInput.trim() || this.isSendingMessage) {
+            return;
+        }
+
+        const messageContent = this.chatInput.trim();
+        this.isSendingMessage = true;
+
+        // Add user message to chat immediately
+        const userMessage: AgentMessage = {
+            id: `user-${Date.now()}`,
+            investigation_id: this.investigationId,
+            message_type: AgentMessageType.USER,
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            metadata: {}
+        };
+
+        // Add to messages
+        const currentMessages = this.chatMessagesSubject.value;
+        this.chatMessagesSubject.next([...currentMessages, userMessage]);
+
+        // Clear input
+        this.chatInput = '';
+
+        // Send message to backend
+        const messageRequest = {
+            content: messageContent,
+            message_type: AgentMessageType.USER
+        };
+
+        this.investigationService.sendMessage(this.investigationId, messageRequest).pipe(
+            takeUntil(this.destroy$),
+            finalize(() => {
+                this.isSendingMessage = false;
+            }),
+            catchError((error: any) => {
+                console.error('Error sending message:', error);
+                // Add error message to chat
+                const errorMessage: AgentMessage = {
+                    id: `error-${Date.now()}`,
+                    investigation_id: this.investigationId,
+                    message_type: AgentMessageType.SYSTEM,
+                    content: 'Error sending message. Please try again.',
+                    timestamp: new Date().toISOString(),
+                    metadata: {}
+                };
+                const currentMessages = this.chatMessagesSubject.value;
+                this.chatMessagesSubject.next([...currentMessages, errorMessage]);
+                return of(null);
+            })
+        ).subscribe((response: any) => {
+            console.log('Message sent successfully:', response);
+            // The response should trigger the SSE stream for the agent's reply
         });
     }
 }
