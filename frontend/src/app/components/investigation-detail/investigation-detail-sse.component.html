@@ -199,6 +199,50 @@
                             </div>
                         </div>
                         <div class="card-body chat-container" style="height: 600px; overflow-y: auto;">
+                            <!-- DEBUG: Always show streaming debug info -->
+                            <div class="alert alert-warning mb-3">
+                                <strong>🔍 Streaming Debug:</strong><br>
+                                isStreaming: {{ isStreaming }}<br>
+                                currentStreamingText.length: {{ currentStreamingText.length }}<br>
+                                currentStreamingText preview: "{{ currentStreamingText.substring(0, 100) }}..."<br>
+                                streamingProgress: {{ streamingProgress.current }}/{{ streamingProgress.total }}<br>
+                                Should show: {{ (isStreaming || currentStreamingText) ? 'YES' : 'NO' }}<br>
+                                Last update: {{ getCurrentTime() }}
+                            </div>
+
+                            <!-- Streaming Text Display Card -->
+                            <div *ngIf="isStreaming || currentStreamingText" class="alert alert-info mb-4">
+                                <div class="d-flex align-items-start">
+                                    <div class="spinner-border spinner-border-sm text-info me-3" role="status" *ngIf="isStreaming">
+                                        <span class="visually-hidden">Streaming...</span>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-stream me-2"></i>
+                                                <span *ngIf="isStreaming">Agent is responding...</span>
+                                                <span *ngIf="!isStreaming && currentStreamingText">Agent response:</span>
+                                            </h6>
+                                            <small class="text-muted" *ngIf="streamingProgress.total > 0">
+                                                Chunk {{ streamingProgress.current }}/{{ streamingProgress.total }}
+                                            </small>
+                                        </div>
+                                        <div class="progress mb-2" *ngIf="streamingProgress.total > 0" style="height: 4px;">
+                                            <div class="progress-bar bg-info"
+                                                [style.width.%]="(streamingProgress.current / streamingProgress.total) * 100">
+                                            </div>
+                                        </div>
+                                        <div class="streaming-text"
+                                            style="font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">
+                                            {{ currentStreamingText || 'Waiting for agent response...' }}
+                                        </div>
+                                        <small class="text-muted d-block mt-2">
+                                            Characters: {{ currentStreamingText.length || 0 }} | Investigation: {{ investigationId }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Enhanced Debug for messages -->
                             <div class="alert alert-warning mb-3">
                                 <strong>💬 Chat Debug:</strong><br>

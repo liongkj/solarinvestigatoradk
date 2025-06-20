@@ -90,13 +90,40 @@
                             </h5>
                         </div>
                         <div class="card-body">
+                            <!-- Streaming progress bar -->
+                            <div *ngIf="isStreaming" class="streaming-progress mb-3">
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar"
+                                        [style.width.%]="streamingProgress.total > 0 ? (streamingProgress.current / streamingProgress.total) * 100 : 0">
+                                    </div>
+                                </div>
+                                <small class="text-muted">
+                                    Chunk {{ streamingProgress.current }} of {{ streamingProgress.total }}
+                                </small>
+                            </div>
                             <div class="streaming-text-container" style="max-height: 200px; overflow-y: auto;">
                                 <pre
                                     class="streaming-text">{{ currentStreamingText || 'Waiting for agent response...' }}</pre>
                             </div>
-                            <div *ngIf="isStreaming" class="text-muted small mt-2">
-                                <i class="fas fa-clock me-1"></i>
-                                Agent is responding...
+
+                            <!-- Enhanced debug info with timestamp -->
+                            <div class="text-muted small mt-2">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Characters: {{ (currentStreamingText || '').length }} |
+                                Investigation: {{ investigationId }} |
+                                Streaming: {{ isStreaming ? 'YES' : 'NO' }} |
+                                Last Update: {{ getCurrentTime() }}
+                                <span *ngIf="isStreaming">
+                                    <i class="fas fa-clock me-1 ms-2"></i>
+                                    Agent is responding...
+                                </span>
+                            </div>
+
+                            <!-- Debug test button -->
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-info" (click)="testStreaming()">
+                                    🧪 Test Streaming
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -282,6 +309,42 @@
                             </div>
                         </div>
                         <div class="card-body">
+                            <!-- Live Streaming Text Display -->
+                            <div *ngIf="isStreaming || currentStreamingText" class="streaming-container mb-4">
+                                <div class="alert alert-info d-flex align-items-start">
+                                    <div class="spinner-border spinner-border-sm text-info me-3" role="status"
+                                        *ngIf="isStreaming">
+                                        <span class="visually-hidden">Streaming...</span>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-stream me-2"></i>
+                                                <span *ngIf="isStreaming">Agent is responding...</span>
+                                                <span *ngIf="!isStreaming && currentStreamingText">Agent
+                                                    response:</span>
+                                            </h6>
+                                            <small class="text-muted" *ngIf="streamingProgress.total > 0">
+                                                Chunk {{ streamingProgress.current }}/{{ streamingProgress.total }}
+                                            </small>
+                                        </div>
+                                        <div class="progress mb-2" *ngIf="streamingProgress.total > 0"
+                                            style="height: 4px;">
+                                            <div class="progress-bar bg-info"
+                                                [style.width.%]="(streamingProgress.current / streamingProgress.total) * 100">
+                                            </div>
+                                        </div>
+                                        <div class="streaming-text"
+                                            style="font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">
+                                            {{ currentStreamingText }}</div>
+                                        <small class="text-muted d-block mt-2">
+                                            Characters: {{ currentStreamingText.length || 0 }} | Investigation: {{
+                                            investigationId }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="chat-container" style="height: 500px; overflow-y: auto;">
                                 <div *ngIf="getVisibleMessages().length === 0" class="text-center py-5 text-muted">
                                     <i class="fas fa-robot fa-3x mb-3"></i>

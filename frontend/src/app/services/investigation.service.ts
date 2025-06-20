@@ -24,6 +24,7 @@ export interface SSEEvent {
     event_id?: string;
     author?: string;
     content?: string;
+    full_content?: string;  // Full accumulated content for streaming
     partial?: boolean;
     turn_complete?: boolean;
     tool_calls?: string[];
@@ -33,10 +34,14 @@ export interface SSEEvent {
     has_artifact_delta?: boolean;
     message?: any;
     ui_summary?: string;
-    full_content?: string;
     status?: string;
     result?: string;
     error?: string;
+    chunk_info?: {  // Information about debounced chunks
+        chunk_index: number;
+        total_chunks: number;
+        chunk_size: number;
+    };
 }
 
 @Injectable({
@@ -330,23 +335,38 @@ export class InvestigationService {
      * Process streaming events and accumulate text chunks
      */
     private processStreamingEvent(event: SSEEvent): void {
-        if (event.type === 'streaming_text_chunk' && event.content && event.partial) {
-            // Accumulate streaming text chunks
+        if (event.type === 'streaming_text_chunk' && event.content) {
+            // Initialize accumulator if not exists
             if (!this.streamingTextAccumulator.has(event.investigation_id)) {
                 this.streamingTextAccumulator.set(event.investigation_id, new BehaviorSubject<string>(''));
             }
 
-            const current = this.streamingTextAccumulator.get(event.investigation_id)!.getValue();
-            const updated = current + event.content;
-            this.streamingTextAccumulator.get(event.investigation_id)!.next(updated);
+            // Use the full_content from backend (which handles proper accumulation)
+            const textToUse = event.full_content ||
+                (this.streamingTextAccumulator.get(event.investigation_id)!.getValue() + event.content);
+
+            this.streamingTextAccumulator.get(event.investigation_id)!.next(textToUse);
+
+            console.log('📝 Streaming chunk processed:', {
+                chunk: event.content?.substring(0, 20) + '...',
+                chunkSize: event.content?.length || 0,
+                fullLength: textToUse.length,
+                chunkInfo: event.chunk_info ?
+                    `${event.chunk_info.chunk_index}/${event.chunk_info.total_chunks}` : 'N/A'
+            });
+
         } else if (event.type === 'complete_text_message' && !event.partial) {
-            // Final complete message - could either replace or finalize accumulated text
+            // Final complete message - set the final content
             if (!this.streamingTextAccumulator.has(event.investigation_id)) {
                 this.streamingTextAccumulator.set(event.investigation_id, new BehaviorSubject<string>(''));
             }
 
             if (event.content) {
                 this.streamingTextAccumulator.get(event.investigation_id)!.next(event.content);
+                console.log('✅ Complete message set:', {
+                    contentLength: event.content.length,
+                    preview: event.content.substring(0, 100) + '...'
+                });
             }
         }
     }

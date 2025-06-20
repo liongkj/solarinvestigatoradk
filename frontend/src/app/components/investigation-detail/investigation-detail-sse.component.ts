@@ -81,6 +81,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     showUiSummaries = true;
     uiSummaryCache: Map<string, string> = new Map();
 
+    // Streaming text support
+    currentStreamingText = '';
+    isStreaming = false;
+    streamingProgress = { current: 0, total: 0 };
+
     constructor(
         private route: ActivatedRoute,
         private router: Router,
@@ -366,6 +371,60 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
                 case 'heartbeat':
                     console.log('💓 SSE heartbeat received');
+                    break;
+
+                case 'streaming_text_chunk':
+                    console.log('📝 Processing streaming_text_chunk event:', {
+                        hasContent: !!event.content,
+                        hasFullContent: !!event.full_content,
+                        chunkInfo: event.chunk_info
+                    });
+                    
+                    // DIRECT UPDATE: Copy the same pattern as realTimeEvents
+                    this.isStreaming = true;
+
+                    // If this is the first chunk, reset the text
+                    if (event.chunk_info && event.chunk_info.chunk_index === 1) {
+                        this.currentStreamingText = '';
+                    }
+
+                    // Update progress if chunk info is available
+                    if (event.chunk_info) {
+                        this.streamingProgress = {
+                            current: event.chunk_info.chunk_index,
+                            total: event.chunk_info.total_chunks
+                        };
+                    }
+
+                    // DIRECT UPDATE: Update streaming text directly like realTimeEvents
+                    if (event.full_content) {
+                        this.currentStreamingText = event.full_content;
+                    } else if (event.content) {
+                        this.currentStreamingText = (this.currentStreamingText || '') + event.content;
+                    }
+
+                    console.log('📝 DIRECT streaming text update:', {
+                        content: event.content?.substring(0, 20) + '...',
+                        fullLength: this.currentStreamingText.length,
+                        progress: `${this.streamingProgress.current}/${this.streamingProgress.total}`
+                    });
+                    
+                    // Trigger change detection manually
+                    this.cdr.detectChanges();
+                    break;
+
+                case 'complete_text_message':
+                    console.log('✅ Processing complete_text_message event');
+                    // Streaming complete - direct update like realTimeEvents
+                    this.isStreaming = false;
+                    this.streamingProgress = { current: 0, total: 0 };
+                    if (event.content) {
+                        this.currentStreamingText = event.content;
+                    }
+                    console.log('✅ Streaming completed - final text length:', this.currentStreamingText.length);
+                    
+                    // Trigger change detection manually
+                    this.cdr.detectChanges();
                     break;
 
                 case 'error':

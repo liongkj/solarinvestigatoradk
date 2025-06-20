@@ -6,8 +6,6 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-
-# from google.genai.adk import RunConfig, StreamingMode
 from google.genai import types
 
 from adk.agents.solar_investigation_agent import get_solar_investigation_agent
@@ -304,17 +302,16 @@ class SimplifiedInvestigationService:
                 role="user", parts=[types.Part(text=initial_prompt)]
             )
 
-            # Create RunConfig for SSE streaming (word-by-word)
-            # run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
-
             # Process with ADK (handles events, state, callbacks automatically)
+            # No special RunConfig needed for text streaming - ADK events naturally provide incremental updates
             final_response = None
             event_count = 0
+            accumulated_text = ""
+
             async for event in runner.run_async(
                 user_id=self.default_user_id,
                 session_id=session_id,
                 new_message=user_content,
-                # run_config=run_config,
             ):
                 event_count += 1
                 logger.info(
@@ -324,8 +321,12 @@ class SimplifiedInvestigationService:
                 # Check for workorder agent requests
                 # await self._handle_sub_agent_requests(investigation.id, event) #TODO: if got time
 
-                # Handle streaming events for real-time updates
-                await self._handle_streaming_event(investigation.id, event)
+                # Handle streaming events for real-time updates with text accumulation
+                current_text = await self._handle_streaming_event(
+                    investigation.id, event, accumulated_text
+                )
+                if current_text is not None:
+                    accumulated_text = current_text
 
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or ""
@@ -793,21 +794,24 @@ class SimplifiedInvestigationService:
         session_id = self._get_session_id(investigation_id)
         user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
 
-        # Create RunConfig for SSE streaming (word-by-word)
-        # run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
-
+        # No special RunConfig needed for text streaming - handle events naturally
         final_response = ""
+        accumulated_text = ""
+
         async for event in runner.run_async(
             user_id=self.default_user_id,
             session_id=session_id,
             new_message=user_content,
-            # run_config=run_config,
         ):
             # Check for workorder agent requests
             await self._handle_sub_agent_requests(investigation_id, event)
 
-            # Handle streaming events for real-time updates
-            await self._handle_streaming_event(investigation_id, event)
+            # Handle streaming events for real-time updates with text accumulation
+            current_text = await self._handle_streaming_event(
+                investigation_id, event, accumulated_text
+            )
+            if current_text is not None:
+                accumulated_text = current_text
 
             if event.is_final_response() and event.content and event.content.parts:
                 final_response = event.content.parts[0].text or ""
@@ -925,8 +929,10 @@ class SimplifiedInvestigationService:
             except Exception as e:
                 logger.error(f"Error queuing SSE event: {e}")
 
-    async def _handle_streaming_event(self, investigation_id: str, event):
-        """Handle ADK streaming events and broadcast to SSE clients"""
+    async def _handle_streaming_event(
+        self, investigation_id: str, event, accumulated_text: str = ""
+    ):
+        """Handle ADK streaming events and broadcast to SSE clients - returns updated accumulated text"""
         try:
             # Extract event details
             event_data = {
@@ -936,7 +942,9 @@ class SimplifiedInvestigationService:
                 "author": getattr(event, "author", None),
             }
 
-            # Handle different event types based on the pseudocode pattern
+            current_accumulated = accumulated_text
+
+            # Handle different event types - focus on text content streaming
             if event.content and event.content.parts:
                 if event.get_function_calls():
                     # Tool call request
@@ -959,19 +967,47 @@ class SimplifiedInvestigationService:
                         }
                     )
                 elif event.content.parts[0].text:
-                    # Text message - check if streaming or complete
+                    # Text message - detect streaming by comparing with accumulated text
                     text_content = event.content.parts[0].text
-                    is_partial = getattr(event, "partial", False)
 
-                    if is_partial:
-                        event_data.update(
-                            {
-                                "type": "streaming_text_chunk",
-                                "content": text_content,
-                                "partial": True,
-                            }
+                    # If this text is longer than what we had before, it's a streaming chunk
+                    if len(text_content) > len(
+                        accumulated_text
+                    ) and text_content.startswith(accumulated_text):
+                        # This is a streaming chunk - send it in smaller debounced chunks
+                        new_chunk = text_content[len(accumulated_text) :]
+                        current_accumulated = text_content
+
+                        # Send the new chunk in smaller pieces for better streaming UX
+                        await self._send_debounced_chunks(
+                            investigation_id, new_chunk, text_content
                         )
+
+                        logger.info(
+                            f"📝 Streaming chunk detected for {investigation_id}: '{new_chunk[:50]}...' (total: {len(text_content)} chars)"
+                        )
+
+                        # Don't queue the event here - it's handled by _send_debounced_chunks
+                        return current_accumulated
+
+                    elif not event.is_final_response():
+                        # This might be a complete intermediate message - also debounce it
+                        current_accumulated = text_content
+
+                        # Send as debounced chunks
+                        await self._send_debounced_chunks(
+                            investigation_id, text_content, text_content
+                        )
+
+                        logger.info(
+                            f"📝 Intermediate text for {investigation_id}: '{text_content[:50]}...' (total: {len(text_content)} chars)"
+                        )
+
+                        # Don't queue the event here - it's handled by _send_debounced_chunks
+                        return current_accumulated
+
                     else:
+                        # This is the final complete message
                         event_data.update(
                             {
                                 "type": "complete_text_message",
@@ -979,6 +1015,11 @@ class SimplifiedInvestigationService:
                                 "partial": False,
                             }
                         )
+                        current_accumulated = text_content
+                        logger.info(
+                            f"✅ Final complete message for {investigation_id}: '{text_content[:50]}...' (total: {len(text_content)} chars)"
+                        )
+
                 else:
                     # Other content (code result, etc.)
                     event_data.update(
@@ -1017,6 +1058,9 @@ class SimplifiedInvestigationService:
                 f"Streamed event type: {event_data['type']} for investigation {investigation_id}"
             )
 
+            # Return the updated accumulated text
+            return current_accumulated
+
         except Exception as e:
             logger.error(
                 f"Error handling streaming event for investigation {investigation_id}: {e}"
@@ -1030,6 +1074,76 @@ class SimplifiedInvestigationService:
                 "partial": False,
             }
             await self._queue_sse_event(investigation_id, error_event)
+            return accumulated_text  # Return unchanged on error
+
+    async def _send_debounced_chunks(
+        self, investigation_id: str, new_text: str, full_content: str
+    ):
+        """Send text content in smaller debounced chunks for better streaming UX"""
+        try:
+            # Configuration for chunking
+            CHUNK_SIZE = 30  # Send 30 characters at a time for better visual streaming
+            DELAY_MS = 80  # 80ms delay between chunks
+
+            # Split new text into chunks
+            chunks = []
+            for i in range(0, len(new_text), CHUNK_SIZE):
+                chunk = new_text[i : i + CHUNK_SIZE]
+                chunks.append(chunk)
+
+            # Send chunks with delays
+            accumulated_sent = ""
+            for i, chunk in enumerate(chunks):
+                accumulated_sent += chunk
+
+                # Calculate current full content position
+                full_content_so_far = full_content[
+                    : len(full_content) - len(new_text) + len(accumulated_sent)
+                ]
+
+                event_data = {
+                    "investigation_id": investigation_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "type": "streaming_text_chunk",
+                    "content": chunk,
+                    "full_content": full_content_so_far,
+                    "partial": True,
+                    "chunk_info": {
+                        "chunk_index": i + 1,
+                        "total_chunks": len(chunks),
+                        "chunk_size": len(chunk),
+                    },
+                }
+
+                # Queue the chunk
+                await self._queue_sse_event(investigation_id, event_data)
+
+                # Add delay between chunks (except for the last one)
+                if i < len(chunks) - 1:
+                    await asyncio.sleep(DELAY_MS / 1000.0)
+
+                logger.debug(
+                    f"📤 Sent chunk {i + 1}/{len(chunks)} for {investigation_id}: '{chunk[:20]}...'"
+                )
+
+            logger.info(
+                f"📝 Completed debounced streaming for {investigation_id}: {len(chunks)} chunks, {len(new_text)} chars"
+            )
+
+        except Exception as e:
+            logger.error(f"Error sending debounced chunks for {investigation_id}: {e}")
+            # Fallback: send as single chunk
+            await self._queue_sse_event(
+                investigation_id,
+                {
+                    "investigation_id": investigation_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "type": "streaming_text_chunk",
+                    "content": new_text,
+                    "full_content": full_content,
+                    "partial": True,
+                },
+            )
 
 
 # Singleton instance
