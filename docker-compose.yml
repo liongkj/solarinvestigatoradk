@@ -1,27 +1,26 @@
 volumes:
-  langgraph-data:
-    driver: local
-  adk-db-data:
+  timeseries_data:
     driver: local
 
 services:
   # PostgreSQL database for ADK DatabaseSessionService
-  adk-postgres:
-    image: postgres:16
-    ports:
-      - "5432:5432"
+  adk_db:
+    image: postgres:17
+    container_name: adk_db
     environment:
-      POSTGRES_DB: adk_solar_investigator
       POSTGRES_USER: adk_user
-      POSTGRES_PASSWORD: adk_password
+      POSTGRES_PASSWORD: my-password
+      POSTGRES_DB: adk_db
+    ports:
+      - "9432:5432"
     volumes:
-      - adk-db-data:/var/lib/postgresql/data
+      - timeseries_data:/var/lib/postgresql/data
     healthcheck:
-      test: pg_isready -U adk_user -d adk_solar_investigator
-      start_period: 10s
-      timeout: 1s
+      test: [ "CMD-SHELL", "pg_isready -U adk_user -d adk_db" ]
+      interval: 10s
+      timeout: 5s
+
       retries: 5
-      interval: 5s
 
   # Redis for ADK (optional, for caching and pub/sub)
   # adk-redis:
@@ -36,22 +35,22 @@ services:
     #   interval: 5s
 
   # Legacy LangGraph services (keep for reference)
-  langgraph-postgres:
-    image: postgres:16
-    ports:
-      - "5453:5432"
-    environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - langgraph-data:/var/lib/postgresql/data
-    healthcheck:
-      test: pg_isready -U postgres
-      start_period: 10s
-      timeout: 1s
-      retries: 5
-      interval: 5s
+  # langgraph-postgres:
+  #   image: postgres:16
+  #   ports:
+  #     - "5453:5432"
+  #   environment:
+  #     POSTGRES_DB: postgres
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   volumes:
+  #     - langgraph-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: pg_isready -U postgres
+  #     start_period: 10s
+  #     timeout: 1s
+  #     retries: 5
+  #     interval: 5s
 
   # langgraph-redis:
   #   image: redis:7-alpine

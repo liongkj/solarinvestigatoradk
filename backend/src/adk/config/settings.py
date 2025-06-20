@@ -29,11 +29,6 @@ class Settings(BaseSettings):
         default=None, description="Path to Google credentials JSON"
     )
 
-    # ADK Configuration
-    adk_model_name: str = Field(default="gemini-1.5-pro", description="ADK model name")
-    adk_temperature: float = Field(default=0.1, description="ADK model temperature")
-    adk_max_tokens: int = Field(default=8192, description="ADK model max tokens")
-
     # Investigation Configuration
     max_investigation_duration: int = Field(
         default=300, description="Max investigation duration in seconds"
@@ -48,16 +43,16 @@ class Settings(BaseSettings):
 
     # Database Configuration for ADK DatabaseSessionService
     database_url: str = Field(
-        default="sqlite:///./solar_investigation_data.db",
+        default="postgresql://adk_user:my-password@localhost:9432/adk_db",
         description="Database URL for ADK session storage (SQLite for dev, PostgreSQL for prod)",
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy echo")
 
     # Redis Configuration (optional)
-    redis_url: Optional[str] = Field(
-        default="redis://localhost:6379",
-        description="Redis URL for caching and pub/sub",
-    )
+    # redis_url: Optional[str] = Field(
+    #     default="redis://localhost:6379",
+    #     description="Redis URL for caching and pub/sub",
+    # )
 
     # CORS Configuration
     cors_origins: list[str] = Field(
