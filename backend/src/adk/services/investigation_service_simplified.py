@@ -6,7 +6,7 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-from google.genai.adk import RunConfig, StreamingMode
+# from google.genai.adk import RunConfig, StreamingMode
 from google.genai import types
 
 from adk.agents.solar_investigation_agent import get_solar_investigation_agent
@@ -276,7 +276,7 @@ class SimplifiedInvestigationService:
             # AND workorder agent as sub-agent
             agent = get_solar_investigation_agent(
                 output_key="investigation_result",  # ADK will auto-save to state
-                after_agent_callback=self._create_ui_summary_callback(investigation.id),
+                after_agent_callback=self._create_ui_summary_callback(investigation.id), # do not touch this line
                 # TODO: Add workorder agent when implemented
                 # workorder_agent=get_workorder_agent(),
             )
@@ -302,7 +302,7 @@ class SimplifiedInvestigationService:
             )
 
             # Create RunConfig for SSE streaming (word-by-word)
-            run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
+            # run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
 
             # Process with ADK (handles events, state, callbacks automatically)
             final_response = None
@@ -311,7 +311,7 @@ class SimplifiedInvestigationService:
                 user_id=self.default_user_id,
                 session_id=session_id,
                 new_message=user_content,
-                run_config=run_config,
+                # run_config=run_config,
             ):
                 event_count += 1
                 logger.info(
@@ -319,7 +319,7 @@ class SimplifiedInvestigationService:
                 )
 
                 # Check for workorder agent requests
-                await self._handle_sub_agent_requests(investigation.id, event)
+                # await self._handle_sub_agent_requests(investigation.id, event) make as agent tool
 
                 # Broadcast real-time updates
                 await self._broadcast_event(investigation.id, event)

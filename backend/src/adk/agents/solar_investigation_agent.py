@@ -8,7 +8,7 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
-from google.genai.adk import RunConfig, StreamingMode
+# from google.genai.adk import RunConfig, StreamingMode
 from pydantic import BaseModel, Field
 import logging
 
@@ -127,14 +127,14 @@ async def investigate_solar_project(
     )
 
     # Create RunConfig for SSE streaming (word-by-word)
-    run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
+    # run_config = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=200)
 
     final_response = "No response received"
     async for event in runner.run_async(
         user_id=user_id,
         session_id=session_id,
         new_message=user_content,
-        run_config=run_config,
+        # run_config=run_config,
     ):
         if event.is_final_response() and event.content and event.content.parts:
             final_response = event.content.parts[0].text
@@ -195,6 +195,6 @@ class SolarInvestigationAgent:
 
 
 # Uncomment to run demo
-# if __name__ == "__main__":
-#     import asyncio
-#     asyncio.run(demo_solar_investigation())
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(demo_solar_investigation())

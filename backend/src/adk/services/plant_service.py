@@ -64,7 +64,7 @@ class PlantService:
     async def get_all_plants(self) -> List[Plant]:
         """Get all available plants"""
         # TODO: implement database query
-        return self._dummy_plants
+        return [Plant.model_validate({'plant_id':'123456','plant_name':'Plant S','type':PlantType.FIT})]
 
     async def search_plants(self, search_term: str = "") -> List[Plant]:
         """Search plants by name"""
