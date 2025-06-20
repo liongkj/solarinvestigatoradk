@@ -47,7 +47,9 @@ class Settings(BaseSettings):
         description="Database URL for ADK session storage (SQLite for dev, PostgreSQL for prod)",
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy echo")
-
+    gemini_api_key: Optional[str] = Field(
+        default=None, description="Google Gemini API key"
+    )
     # Redis Configuration (optional)
     # redis_url: Optional[str] = Field(
     #     default="redis://localhost:6379",
