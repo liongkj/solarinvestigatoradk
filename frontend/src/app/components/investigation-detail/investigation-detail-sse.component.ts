@@ -138,10 +138,10 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // Progress tracking - Dynamic steps based on actual agent activity
     progressSteps: ProgressStep[] = [
         { name: 'Investigation Started', completed: false, timestamp: null },
-        { name: 'Agent Analysis', completed: false, timestamp: null },
-        { name: 'Tool Execution', completed: false, timestamp: null },
-        { name: 'Data Processing', completed: false, timestamp: null },
-        { name: 'Investigation Complete', completed: false, timestamp: null }
+        // { name: 'Agent Analysis', completed: false, timestamp: null },
+        // { name: 'Tool Execution', completed: false, timestamp: null },
+        // { name: 'Data Processing', completed: false, timestamp: null },
+        // { name: 'Investigation Complete', completed: false, timestamp: null }
     ];
 
     // Track progress step history for dynamic updates

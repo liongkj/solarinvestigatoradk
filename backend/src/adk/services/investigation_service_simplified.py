@@ -9,6 +9,10 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from adk.problem_finder.agent import root_agent
 from adk.agents.ui_summarizer_agent import generate_ui_summary
+from google.adk.events import Event, EventActions
+from google.genai.types import Part, Content
+from datetime import timedelta
+import time
 
 # TODO: implement this
 # from adk.agents.workorder_agent import get_workorder_agent
@@ -265,6 +269,7 @@ class SimplifiedInvestigationService:
         self, investigation: Investigation
     ) -> None:  # TODO: add agent here
         """Process investigation using ADK best practices"""
+
         try:
             # Send initial investigation started event
             await self._queue_sse_event(
@@ -324,6 +329,24 @@ class SimplifiedInvestigationService:
                 session_id=session_id,
                 new_message=user_content,
             ):
+                event_count += 1
+                logger.info(
+                    f"Processing ADK event #{event_count} for investigation {investigation.id}: {event.id}"
+                )
+
+                # Check for workorder agent requests
+                # await self._handle_sub_agent_requests(investigation.id, event) #TODO: if got time
+
+                # Handle streaming events for real-time updates with text accumulation
+                current_text = await self._handle_streaming_event(
+                    investigation.id, event, accumulated_text
+                )
+                if current_text is not None:
+                    accumulated_text = current_text
+
+                if event.is_final_response() and event.content and event.content.parts:
+                    final_response = event.content.parts[0].text or ""
+
                 # Send status update only when agent changes (not for every event)
                 if event.author != last_active_agent:
                     last_active_agent = event.author
@@ -344,7 +367,7 @@ class SimplifiedInvestigationService:
                             tool_name_friendly = map_tool_names[tool_name]
                             event_data = {
                                 "investigation_id": investigation.id,
-                                "timestamp": datetime.now().isoformat(),
+                                # "timestamp": datetime.now().isoformat(),
                                 "type": "streaming_text_chunk",
                                 "content": tool_name_friendly,
                                 "full_content": tool_name_friendly,
@@ -353,6 +376,28 @@ class SimplifiedInvestigationService:
 
                             # Queue the chunk
                             await self._queue_sse_event(investigation.id, event_data)
+                            state_changes = {
+                                "task_status": "active",
+                            }
+                            # actions_with_update = EventActions(
+                            #     state_delta=state_changes
+                            # )
+                            # system_event = Event(
+                            #     invocation_id="inv_login_update",
+                            #     author="system",  # Or 'agent', 'tool' etc.
+                            #     actions=actions_with_update,
+                            #     timestamp=time.time(),
+                            #     # content might be None or represent the action taken
+                            # )
+                            # session = await self.session_service.get_session(
+                            #     app_name=self.app_name,
+                            #     user_id=self.default_user_id,
+                            #     session_id=self._get_session_id(investigation.id),
+                            # )
+                            # await self.session_service.append_event(
+                            #     session, system_event
+                            # )
+                            # add to event state
                     elif (
                         event.content
                         and event.content.parts
@@ -383,24 +428,6 @@ class SimplifiedInvestigationService:
                             },
                         )
                         last_status_sent = current_status
-
-                event_count += 1
-                logger.info(
-                    f"Processing ADK event #{event_count} for investigation {investigation.id}: {event.id}"
-                )
-
-                # Check for workorder agent requests
-                # await self._handle_sub_agent_requests(investigation.id, event) #TODO: if got time
-
-                # Handle streaming events for real-time updates with text accumulation
-                current_text = await self._handle_streaming_event(
-                    investigation.id, event, accumulated_text
-                )
-                if current_text is not None:
-                    accumulated_text = current_text
-
-                if event.is_final_response() and event.content and event.content.parts:
-                    final_response = event.content.parts[0].text or ""
 
             logger.info(
                 f"Completed ADK processing for investigation {investigation.id}, processed {event_count} events"
@@ -444,7 +471,7 @@ class SimplifiedInvestigationService:
             if investigation.id in self.active_runners:
                 del self.active_runners[investigation.id]
 
-    async def _handle_sub_agent_requests(self, investigation_id: str, event):
+        # async def _handle_sub_agent_requests(self, investigation_id: str, event):
         """Handle sub-agent requests like @workorder-agent"""
         try:
             if not event.content or not event.content.parts:
@@ -839,6 +866,7 @@ class SimplifiedInvestigationService:
     ) -> str:
         """Continue investigation with user input. Not implemented yet"""
         runner = self.active_runners.get(investigation_id)
+
         if not runner:
             # Recreate runner if needed
             agent = root_agent
