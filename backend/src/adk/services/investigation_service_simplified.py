@@ -7,8 +7,7 @@ from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai import types
-
-from adk.agents.solar_investigation_agent import get_solar_investigation_agent
+from adk.problem_finder.agent import create_root_agent
 from adk.agents.ui_summarizer_agent import generate_ui_summary
 
 # TODO: implement this
@@ -191,7 +190,12 @@ class SimplifiedInvestigationService:
             "created_at": investigation.created_at.isoformat(),
             "updated_at": investigation.updated_at.isoformat(),
             "plant_name": investigation.plant_name,
+            "inverter_date_to_check": None,
+            "inverter_device_id_and_capacity_peak": None,
+            "date_requested": None,
+            "date_today": None,
         }
+        # TODO: TO be retrieved using context.state later
 
         # Create ADK session (this handles all storage automatically)
         await self.session_service.create_session(
@@ -278,7 +282,8 @@ class SimplifiedInvestigationService:
 
             # Create agent with after_agent_callback for UI processing
             # AND workorder agent as sub-agent
-            agent = get_solar_investigation_agent(
+            agent = create_root_agent(
+                investigation=investigation,
                 # output_key="investigation_result",  # ADK will auto-save to state
                 # after_agent_callback=self._create_ui_summary_callback(investigation.id),
                 # # TODO: Add workorder agent when implemented later
@@ -778,7 +783,7 @@ class SimplifiedInvestigationService:
     async def continue_investigation(
         self, investigation_id: str, user_message: str
     ) -> str:
-        """Continue investigation with user input"""
+        """Continue investigation with user input. Not implemented yet"""
         runner = self.active_runners.get(investigation_id)
         if not runner:
             # Recreate runner if needed

@@ -2,9 +2,10 @@ import json
 
 from google.adk.tools.tool_context import ToolContext
 import numpy as np
-import pandas as pd
-from sklearn.ensemble import IsolationForest
-from statsmodels.tsa.seasonal import seasonal_decompose
+
+# import pandas as pd
+# from sklearn.ensemble import IsolationForest
+# from statsmodels.tsa.seasonal import seasonal_decompose
 
 
 def append_problematic_rows(rows: str, tool_context: ToolContext):
@@ -156,11 +157,16 @@ async def filter_plant_timeseries_data(
     df_work["low_yield"] = (df_work["irradiance_wm_squared"] > 400) & (
         df_work["five_min_pr_percent"] < 60
     )
-    df_work["power_drop"] = pd.to_numeric(df_work["active_power_effective_kw"].diff(), errors="coerce") < -100
-    df_work["clipping"] = (
-        (pd.to_numeric(df_work["active_power_effective_kw"].diff().abs(), errors="coerce") < 1)
-        & (df_work["irradiance_wm_squared"] > 900)
+    df_work["power_drop"] = (
+        pd.to_numeric(df_work["active_power_effective_kw"].diff(), errors="coerce")
+        < -100
     )
+    df_work["clipping"] = (
+        pd.to_numeric(
+            df_work["active_power_effective_kw"].diff().abs(), errors="coerce"
+        )
+        < 1
+    ) & (df_work["irradiance_wm_squared"] > 900)
 
     # Time Series Decomposition
     try:
@@ -187,9 +193,7 @@ async def filter_plant_timeseries_data(
         ml_predictions = clf.fit_predict(ml_features)
         df_work.loc[ml_features.index, "ml_anomaly"] = ml_predictions == -1
         # Fix the FutureWarning by using infer_objects
-        df_work["ml_anomaly"] = (
-            df_work["ml_anomaly"].fillna(False).infer_objects()
-        )
+        df_work["ml_anomaly"] = df_work["ml_anomaly"].fillna(False).infer_objects()
     else:
         df_work["ml_anomaly"] = False
 

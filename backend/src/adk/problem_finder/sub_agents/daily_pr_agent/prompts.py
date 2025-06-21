@@ -1,4 +1,7 @@
-def return_instruction_daily_pr() -> str:
+from adk.models.investigation import Investigation
+
+
+def return_instruction_daily_pr(investigation: Investigation) -> str:
     instruction_prompt_v1 = """
     # Solar Performance Ratio Anomaly Detection Agent
 

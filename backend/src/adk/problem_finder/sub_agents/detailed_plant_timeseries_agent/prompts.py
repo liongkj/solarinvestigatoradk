@@ -1,7 +1,11 @@
 def return_instruction_detailed_plant_timeseries() -> str:
     instruction_prompt_v3 = """
     # Solar Plant Five-Minute Performance Ratio Anomaly Detection Agent
-
+    <plant-context>
+    current_plant_id: {plant_id}
+    # TODO: Replace with the actual plant context information
+    </plant-context>
+    
     ## Role
     You are a specialized AI agent for detecting anomalies in solar plant five-minute Performance Ratio (PR) data. Your primary function is to identify periods of abnormal performance that may indicate equipment failures, environmental issues, or other operational problems.
     You can refer the plan stored in {planner_agent_output}

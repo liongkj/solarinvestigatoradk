@@ -9,6 +9,8 @@ from .tools import append_problematic_rows, filter_plant_timeseries_data
 
 
 def setup(callback_context: CallbackContext):
+    # TODO marcus: access context.state
+    # https://google.github.io/adk-docs/sessions/state/#how-state-is-updated-recommended-methods
     if "problematic_five_minutes_pr" not in callback_context.state:
         problematic_five_minutes_pr_settings = []
         callback_context.state["problematic_five_minutes_pr"] = (
@@ -25,10 +27,21 @@ detailed_plant_timeseries_agent = Agent(
     tools=[
         tools[3],
         tools[5],
-        filter_plant_timeseries_data,
+        # filter_plant_timeseries_data,
         append_problematic_rows,
     ],
     before_agent_callback=setup,
     output_key="detailed_plant_timeseries_agent_output",
     generate_content_config=types.GenerateContentConfig(temperature=0.1),
 )
+
+# line 20->line 26 -> line 20 -> line 28-> line 20
+# TODO marcus:
+# use after tool callback
+# agent_timeseries
+
+# before callback -> None
+
+# tools[3] -> dict["result"] -> result
+
+# after toolcallback(response) -> filter_plant_timeseries_data(response) -> modfied_response

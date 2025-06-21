@@ -334,7 +334,6 @@ def return_instruction_planner() -> str:
     - Use `tools[5]` to retrieve the plant id of requested plant
     - Use `tools[6]` to retrieve the device id of requested plant's inverters
     - Figure out what dates to check for the inverters performance
-    - Use tool `initial_config` (MANDATORY) to store the information
 
     ## Success Criteria
 
