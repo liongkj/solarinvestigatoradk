@@ -13,6 +13,7 @@ from google.adk.cli.fast_api import get_fast_api_app
 from adk.config import settings
 from adk.controllers import investigation_management_router
 from adk.controllers.plant_controller import router as plant_router
+from adk.controllers.workorder_controller import router as workorder_router
 
 # WebSocket removed for simplified SSE-only architecture
 # from adk.controllers.websocket_controller import router as websocket_router
@@ -58,6 +59,7 @@ app.add_middleware(
 # Include our custom investigation routers
 app.include_router(investigation_management_router)
 app.include_router(plant_router)
+app.include_router(workorder_router)  # Include workorder controller router
 # WebSocket router removed for simplified SSE-only architecture
 
 

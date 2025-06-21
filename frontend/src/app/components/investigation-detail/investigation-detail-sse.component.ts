@@ -587,25 +587,28 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             });
     }
 
-    // Create manual workorder
+    // Create workorder with agent processing
     createManualWorkorder(): void {
         if (!this.investigationId) return;
 
-        const workorderData = {
-            type: 'manual',
-            description: 'Manual workorder created by user',
-            priority: 'medium'
-        };
+        // Hardcoded todo summary for testing (as requested)
+        const todoSummary = "Inspect solar panel inverters for performance degradation and clean panels if dust accumulation is detected. Check electrical connections and verify monitoring system data accuracy.";
+        const priority = "high";
 
-        this.investigationService.createWorkorder(this.investigationId, workorderData)
+        console.log('Creating workorder with agent processing...', todoSummary);
+
+        this.investigationService.createWorkorderWithAgent(this.investigationId, todoSummary, priority)
             .pipe(takeUntil(this.destroy$))
             .subscribe({
-                next: (workorder) => {
-                    console.log('Manual workorder created:', workorder);
+                next: (response) => {
+                    console.log('Workorder agent completed:', response);
+                    // Reload workorders to show the new one
                     this.loadWorkorders();
+                    // Chat messages will be automatically updated via SSE events
                 },
                 error: (error) => {
-                    console.error('Error creating workorder:', error);
+                    console.error('Error creating workorder with agent:', error);
+                    // Fallback error message could be added to chat if needed
                 }
             });
     }

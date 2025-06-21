@@ -98,25 +98,72 @@ export interface ChatHistoryResponse {
 export interface DecisionRequest {
     decision: string;
     decision_type?: string;
-    additional_data?: { [key: string]: any };
+    notes?: string;
 }
 
 export interface DecisionResponse {
-    investigation_id: string;
-    decision_accepted: boolean;
+    success: boolean;
     message: string;
-    next_steps?: string[];
+    updated_investigation: Investigation;
 }
 
 export interface MessageRequest {
     content: string;
-    message_type?: AgentMessageType;
+    message_type: AgentMessageType;
 }
 
 export interface HealthResponse {
     status: string;
+    version: string;
     timestamp: string;
-    service: string;
+    database: {
+        status: string;
+        total_investigations: number;
+    };
+}
+
+// Workorder related interfaces
+export enum WorkorderStatus {
+    PENDING = 'pending',
+    IN_PROGRESS = 'in_progress',
+    COMPLETED = 'completed',
+    FAILED = 'failed'
+}
+
+export enum WorkorderType {
+    MAINTENANCE = 'maintenance',
+    INSPECTION = 'inspection',
+    REPAIR = 'repair',
+    ANALYSIS = 'analysis'
+}
+
+export interface WorkorderAgentRequest {
+    todo_summary: string;
+    priority?: string;
+}
+
+export interface WorkorderAgentResponse {
+    workorder_id: string;
+    investigation_id: string;
+    todo_summary: string;
+    agent_response: string;
+    priority: string;
+    status: WorkorderStatus;
+    workorder_type: WorkorderType;
+    created_at: string;
+}
+
+export interface Workorder {
+    id: string;
+    investigation_id: string;
+    type: WorkorderType;
+    description: string;
+    agent_response?: string;
+    priority: string;
+    status: WorkorderStatus;
+    created_at: string;
+    updated_at: string;
+    completed_at?: string;
 }
 
 // Legacy interface for backward compatibility with existing dashboard component

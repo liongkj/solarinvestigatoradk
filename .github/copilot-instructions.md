@@ -40,7 +40,12 @@ uv add google-adk-python
 </example>
 2. Use `httpx` for HTTP requests
 3. Use `pydantic` for data validation
-4. When encounter with google adk, gemini, or any other agent development, use mcp server to find the documentation
+4. When encounter with google adk, gemini, or any other agent development, use mcp server to find the documentation with the parameter 
+```
+{
+  "libraryName": "google-adk-python"
+}
+```
 
 ## Angular
 1. Use RxJS for state management

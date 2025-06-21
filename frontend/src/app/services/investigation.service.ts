@@ -305,6 +305,18 @@ export class InvestigationService {
     }
 
     /**
+     * Create workorder with agent processing
+     */
+    createWorkorderWithAgent(investigationId: string, todoSummary: string, priority: string = 'medium'): Observable<any> {
+        const request = {
+            todo_summary: todoSummary,
+            priority: priority
+        };
+        return this.http.post(`${this.baseUrl}${investigationId}/workorders/agent`, request)
+            .pipe(catchError(this.handleError));
+    }
+
+    /**
      * Get workorders for investigation
      */
     getWorkorders(investigationId: string): Observable<any[]> {
