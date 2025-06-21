@@ -74,20 +74,20 @@ tools = toolbox.load_toolset()
 #     tool_context.state["date_today"] = date_today
 
 
-post_alarm_research = ParallelAgent(
-    name="post_alarm_research",
-    sub_agents=[
-        alarm_structurer_agent,
-        detailed_inverter_performance_agent,
-    ],
-)
+# post_alarm_research = ParallelAgent(
+#     name="post_alarm_research",
+#     sub_agents=[
+#         alarm_structurer_agent,
+#         detailed_inverter_performance_agent,
+#     ],
+# )
 
 alarm_researcher = SequentialAgent(
     name="alarm_researcher",
     description="You are a sequential agent that coordinates the execution of the alarm_research_agent.",
     sub_agents=[
         alarm_research_agent,
-        post_alarm_research,
+        detailed_inverter_performance_agent,
     ],
 )
 
@@ -99,30 +99,58 @@ parallel_pipeline = ParallelAgent(
     ],
 )
 
+def store_inverter_device_id_and_capacity_peak(
+    tool_context: ToolContext, data : dict
+):
+    """Store inverter device id and capacity peak in the tool context state.
+    
+    args:
+        tool_context (ToolContext): The context of the tool where the state is stored.
+        data (dict): A dictionary containing inverter device ids and their corresponding capacity peaks.
+    """
+    if "inverter_device_id_and_capacity_peak" not in tool_context.state:
+        tool_context.state["inverter_device_id_and_capacity_peak"] = str(data)
+    tool_context.state["inverter_device_id_and_capacity_peak"] = str(data)
 
-def create_root_agent(investigation: Investigation):
-    "Lazy intialization of the root agent"
-    planner_agent = Agent(
-        name="planner_agent",
-        model="gemini-2.5-flash-preview-05-20",
-        instruction=return_instruction_planner(),
-        description="You are an expert planner",
-        output_key="planner_agent_output",
-        generate_content_config=types.GenerateContentConfig(temperature=0.1),
-        tools=[
-            tools[5],
-            tools[6],
-        ],
-    )
 
-    root_agent = SequentialAgent(
+
+planner_agent = Agent(
+    name="planner_agent",
+    model="gemini-2.5-flash-preview-05-20",
+    instruction=return_instruction_planner(),
+    description="You are an expert planner",
+    output_key="planner_agent_output",
+    generate_content_config=types.GenerateContentConfig(temperature=0.1),
+    tools=[
+        tools[5],
+        tools[6],
+        store_inverter_device_id_and_capacity_peak
+    ],
+)
+
+
+# def create_root_agent(investigation: Investigation):
+#     "Lazy intialization of the root agent"
+
+#     root_agent = SequentialAgent(
+#         name="problem_finder",
+#         sub_agents=[
+#             planner_agent,
+#             daily_pr_agent,
+#             # parallel_pipeline,
+#             # aggregator_agent,
+#         ],
+#         # before_agent_callback=setup,
+#     )
+#     return root_agent
+
+root_agent = SequentialAgent(
         name="problem_finder",
         sub_agents=[
             planner_agent,
             daily_pr_agent,
-            # parallel_pipeline,
-            # aggregator_agent,
+            parallel_pipeline,
+            aggregator_agent,
         ],
         # before_agent_callback=setup,
     )
-    return root_agent

@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai import types
-from adk.problem_finder.agent import create_root_agent
+from adk.problem_finder.agent import root_agent
 from adk.agents.ui_summarizer_agent import generate_ui_summary
 
 # TODO: implement this
@@ -282,13 +282,15 @@ class SimplifiedInvestigationService:
 
             # Create agent with after_agent_callback for UI processing
             # AND workorder agent as sub-agent
-            agent = create_root_agent(
-                investigation=investigation,
-                # output_key="investigation_result",  # ADK will auto-save to state
-                # after_agent_callback=self._create_ui_summary_callback(investigation.id),
-                # # TODO: Add workorder agent when implemented later
-                # # workorder_agent=get_workorder_agent(),
-            )  # swap to out agent
+            # agent = create_root_agent(
+            #     investigation=investigation,
+            #     # output_key="investigation_result",  # ADK will auto-save to state
+            #     # after_agent_callback=self._create_ui_summary_callback(investigation.id),
+            #     # # TODO: Add workorder agent when implemented later
+            #     # # workorder_agent=get_workorder_agent(),
+            # )  # swap to out agent
+
+            agent = root_agent
 
             # Create runner
             runner = Runner(
@@ -754,7 +756,7 @@ class SimplifiedInvestigationService:
         plant_name = plant.plant_name if plant else "Unknown Plant"
 
         return f"""
-        Please begin a comprehensive solar installation feasibility investigation for:
+        Investigate plant based on the following details:
         
         PLANT INFORMATION:
         - Plant ID: {investigation.plant_id}
@@ -768,16 +770,7 @@ class SimplifiedInvestigationService:
         ADDITIONAL CONTEXT:
         {investigation.additional_notes or "No additional specifications provided."}
         
-        AVAILABLE CAPABILITIES:
-        - If you need to create work orders for maintenance or installation tasks, you can request @workorder-agent
-        - You can pause the investigation at any time to wait for external information
-        - You can request human decisions when needed
         
-        Please provide a comprehensive solar feasibility assessment including site analysis, 
-        technical assessment, financial analysis, implementation roadmap, and clear recommendations.
-        
-        If you identify any maintenance needs or installation requirements that need work orders, 
-        please mention @workorder-agent with the specific requirements.
         """
 
     async def continue_investigation(
@@ -787,10 +780,7 @@ class SimplifiedInvestigationService:
         runner = self.active_runners.get(investigation_id)
         if not runner:
             # Recreate runner if needed
-            agent = get_solar_investigation_agent(
-                output_key="investigation_result",
-                after_agent_callback=self._create_ui_summary_callback(investigation_id),
-            )
+            agent = root_agent
             runner = Runner(
                 agent=agent,
                 app_name=self.app_name,

@@ -9,7 +9,7 @@ def return_instruction_detailed_inverter_performance() -> str:
 
     ## Input Format
     - **device_id and its capacity peak**: Available in `{inverter_device_id_and_capacity_peak}` (example: `{'1jrn3i2 jr32':'130.5kwp'}`)
-    - **dates**: `{inverter_date_to_check}`
+    - **dates**: `{start_date}` to `{end_date}` 
     - **plant_id**: `{plant_id}`
     - **check the report from alarm research agent to check which inverters needed to be investigated , the report is stored in {alarm_report}
 

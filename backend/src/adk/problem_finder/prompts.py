@@ -334,6 +334,7 @@ def return_instruction_planner() -> str:
     - Use `tools[5]` to retrieve the plant id of requested plant
     - Use `tools[6]` to retrieve the device id of requested plant's inverters
     - Figure out what dates to check for the inverters performance
+    - Use `store_inverter_device_id_and_capacity_peak` (MANDATORY) to store the device id and capacity peak of the inverters
 
     ## Success Criteria
 

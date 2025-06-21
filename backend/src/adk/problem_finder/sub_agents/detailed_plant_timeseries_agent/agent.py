@@ -26,8 +26,7 @@ detailed_plant_timeseries_agent = Agent(
     instruction=return_instruction_detailed_plant_timeseries(),
     tools=[
         tools[3],
-        tools[5],
-        # filter_plant_timeseries_data,
+        filter_plant_timeseries_data,
         append_problematic_rows,
     ],
     before_agent_callback=setup,

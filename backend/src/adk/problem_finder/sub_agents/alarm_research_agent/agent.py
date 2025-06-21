@@ -205,6 +205,6 @@ alarm_research_agent = Agent(
            tools[3],
            ],
     instruction=rag_prompt_v7(),
-    output_key="alarm_report",
+    output_key="alarm_agent_output",
     before_agent_callback=state_setup
 )

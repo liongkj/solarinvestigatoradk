@@ -19,7 +19,7 @@ detailed_inverter_performance_agent = Agent(
     name="detailed_inverter_performance_agent",
     model="gemini-2.5-flash-preview-05-20",
     instruction=return_instruction_detailed_inverter_performance(),
-    tools=[tools[7], append_problematic_rows],
+    tools=[tools[7],append_problematic_rows],
     before_agent_callback=setup,
     output_key="detailed_inverter_performance_agent_output",
 )

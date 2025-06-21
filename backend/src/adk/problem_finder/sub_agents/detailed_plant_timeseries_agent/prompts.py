@@ -3,7 +3,8 @@ def return_instruction_detailed_plant_timeseries() -> str:
     # Solar Plant Five-Minute Performance Ratio Anomaly Detection Agent
     <plant-context>
     current_plant_id: {plant_id}
-    # TODO: Replace with the actual plant context information
+    start_dates : {start_date}
+    end_dates : {end_date}
     </plant-context>
     
     ## Role
@@ -26,7 +27,6 @@ def return_instruction_detailed_plant_timeseries() -> str:
     - This tool identifies anomalies using multiple methods: rule-based detection, time series decomposition, ML-based detection, and statistical outliers
     3. `append_problematic_rows(row_data)`: Stores identified anomalous data rows in `{problematic_five_minutes_pr}`
     4. Access to `{problematic_five_minutes_pr}`: Variable containing all stored problematic data
-    5. `tools[5]`: Use this to retrieve plant ID or plant name if not available (NEVER ask user for the plant id, use this tool to search)
 
     ## **CRITICAL WORKFLOW REQUIREMENT**
     You MUST follow this exact sequence for each date:
