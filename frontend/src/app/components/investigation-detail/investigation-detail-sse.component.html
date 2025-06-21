@@ -146,41 +146,33 @@
                         <div class="card-body chat-container">
 
                             <!-- Messages Area -->
-                            <div class="messages-area">
+                            <div class="messages-area" #messagesContainer>
 
-                                <!-- Streaming Text Display Card -->
-                                <div *ngIf="isStreaming || currentStreamingText" class="alert alert-info mb-4">
+                                <!-- Streaming Message (ChatGPT style) -->
+                                <div *ngIf="(isStreaming$ | async) && (streamingText$ | async)"
+                                    class="message-card alert alert-success mb-2">
                                     <div class="d-flex align-items-start">
-                                        <div class="spinner-border spinner-border-sm text-info me-3" role="status"
-                                            *ngIf="isStreaming">
-                                            <span class="visually-hidden">Streaming...</span>
+                                        <!-- Agent Icon -->
+                                        <div class="me-2">
+                                            <i class="fas fa-robot fa-lg text-success"></i>
                                         </div>
+
                                         <div class="flex-grow-1">
+                                            <!-- Message Header -->
                                             <div class="d-flex justify-content-between align-items-center mb-2">
                                                 <h6 class="mb-0">
-                                                    <i class="fas fa-stream me-2"></i>
-                                                    <span *ngIf="isStreaming">Agent is responding...</span>
-                                                    <span *ngIf="!isStreaming && currentStreamingText">Agent
-                                                        response:</span>
+                                                    <span class="badge bg-success me-2">Agent</span>
+                                                    <small class="text-muted">responding...</small>
                                                 </h6>
-                                                <small class="text-muted" *ngIf="streamingProgress.total > 0">
-                                                    Chunk {{ streamingProgress.current }}/{{ streamingProgress.total }}
-                                                </small>
+                                                <small class="text-muted">{{ getCurrentTime() }}</small>
                                             </div>
-                                            <div class="progress mb-2" *ngIf="streamingProgress.total > 0"
-                                                style="height: 4px;">
-                                                <div class="progress-bar bg-info"
-                                                    [style.width.%]="(streamingProgress.current / streamingProgress.total) * 100">
-                                                </div>
+
+                                            <!-- Streaming Content -->
+                                            <div class="message-content"
+                                                style="white-space: pre-wrap; line-height: 1.5;">
+                                                {{ streamingText$ | async }}
+                                                <span class="typing-cursor">|</span>
                                             </div>
-                                            <div class="streaming-text"
-                                                style="font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">
-                                                {{ currentStreamingText || 'Waiting for agent response...' }}
-                                            </div>
-                                            <small class="text-muted d-block mt-2">
-                                                Characters: {{ currentStreamingText.length || 0 }} | Investigation: {{
-                                                investigationId }}
-                                            </small>
                                         </div>
                                     </div>
                                 </div>

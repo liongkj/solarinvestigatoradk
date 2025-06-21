@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone, ChangeDetectionStrategy, ViewChild, ElementRef } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -33,6 +33,8 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     private realTimeEventsSubject = new BehaviorSubject<SSEEvent[]>([]);
     private chatMessagesSubject = new BehaviorSubject<AgentMessage[]>([]);
     private workordersSubject = new BehaviorSubject<any[]>([]);
+    private streamingTextSubject = new BehaviorSubject<string>('');
+    private isStreamingSubject = new BehaviorSubject<boolean>(false);
 
     // Public observables for template consumption - use asObservable() to prevent external modification
     public readonly realTimeEvents$ = this.realTimeEventsSubject.asObservable().pipe(
@@ -47,6 +49,15 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     public readonly workorders$ = this.workordersSubject.asObservable().pipe(
         tap(workorders => console.log('workorders$ emitting:', workorders.length, 'workorders')),
+        shareReplay(1)
+    );
+
+    // Streaming observables for ChatGPT-style display
+    public readonly streamingText$ = this.streamingTextSubject.asObservable().pipe(
+        shareReplay(1)
+    );
+
+    public readonly isStreaming$ = this.isStreamingSubject.asObservable().pipe(
         shareReplay(1)
     );
 
@@ -73,6 +84,9 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     private statusRefreshInterval: any = null;
     public sseSubscription: Subscription | null = null;
 
+    // Auto-scroll support for ChatGPT-like behavior
+    @ViewChild('messagesContainer', { static: false }) messagesContainer?: ElementRef;
+
     // Progress tracking
     progressSteps: ProgressStep[] = [
         { name: 'Investigation Started', completed: false, timestamp: null },
@@ -89,7 +103,6 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // Streaming text support
     currentStreamingText = '';
     isStreaming = false;
-    streamingProgress = { current: 0, total: 0 };
 
     constructor(
         private route: ActivatedRoute,
@@ -139,6 +152,8 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         this.realTimeEventsSubject.complete();
         this.chatMessagesSubject.complete();
         this.workordersSubject.complete();
+        this.streamingTextSubject.complete();
+        this.isStreamingSubject.complete();
     }
 
     loadInvestigationDetails(): void {
@@ -381,54 +396,75 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 case 'streaming_text_chunk':
                     console.log('📝 Processing streaming_text_chunk event:', {
                         hasContent: !!event.content,
-                        hasFullContent: !!event.full_content,
-                        chunkInfo: event.chunk_info
+                        hasFullContent: !!event.full_content
                     });
 
-                    // DIRECT UPDATE: Copy the same pattern as realTimeEvents
-                    this.isStreaming = true;
+                    // ChatGPT-style streaming: start streaming on first chunk
+                    this.isStreamingSubject.next(true);
+                    this.isStreaming = true; // Keep for template compatibility
 
                     // If this is the first chunk, reset the text
                     if (event.chunk_info && event.chunk_info.chunk_index === 1) {
                         this.currentStreamingText = '';
+                        this.streamingTextSubject.next('');
                     }
 
-                    // Update progress if chunk info is available
-                    if (event.chunk_info) {
-                        this.streamingProgress = {
-                            current: event.chunk_info.chunk_index,
-                            total: event.chunk_info.total_chunks
-                        };
-                    }
-
-                    // DIRECT UPDATE: Update streaming text directly like realTimeEvents
+                    // Update streaming text - ChatGPT style incremental display
                     if (event.full_content) {
                         this.currentStreamingText = event.full_content;
+                        this.streamingTextSubject.next(event.full_content);
                     } else if (event.content) {
                         this.currentStreamingText = (this.currentStreamingText || '') + event.content;
+                        this.streamingTextSubject.next(this.currentStreamingText);
                     }
 
-                    console.log('📝 DIRECT streaming text update:', {
+                    // Auto-scroll during streaming for ChatGPT-like behavior
+                    this.scrollToBottom();
+
+                    console.log('📝 Streaming text updated:', {
                         content: event.content?.substring(0, 20) + '...',
-                        fullLength: this.currentStreamingText.length,
-                        progress: `${this.streamingProgress.current}/${this.streamingProgress.total}`
+                        fullLength: this.currentStreamingText.length
                     });
 
-                    // Trigger change detection manually
+                    // Trigger change detection for real-time updates
                     this.cdr.detectChanges();
                     break;
 
                 case 'complete_text_message':
                     console.log('✅ Processing complete_text_message event');
-                    // Streaming complete - direct update like realTimeEvents
-                    this.isStreaming = false;
-                    this.streamingProgress = { current: 0, total: 0 };
+
+                    // ChatGPT-style completion: stop streaming and add final message
+                    this.isStreamingSubject.next(false);
+                    this.isStreaming = false; // Keep for template compatibility
+
                     if (event.content) {
                         this.currentStreamingText = event.content;
-                    }
-                    console.log('✅ Streaming completed - final text length:', this.currentStreamingText.length);
+                        this.streamingTextSubject.next(event.content);
 
-                    // Trigger change detection manually
+                        // Add the complete message to chat history as normal message
+                        const completedMessage: AgentMessage = {
+                            id: `agent-${Date.now()}`,
+                            investigation_id: this.investigationId,
+                            message_type: AgentMessageType.AGENT,
+                            content: event.content,
+                            timestamp: new Date().toISOString(),
+                            metadata: {}
+                        };
+
+                        const currentMessages = this.chatMessagesSubject.value;
+                        this.chatMessagesSubject.next([...currentMessages, completedMessage]);
+
+                        // Auto-scroll to show the new complete message
+                        this.scrollToBottom();
+
+                        // Clear streaming text after adding to chat
+                        setTimeout(() => {
+                            this.currentStreamingText = '';
+                            this.streamingTextSubject.next('');
+                        }, 100); // Small delay to allow smooth transition
+                    }
+
+                    console.log('✅ Streaming completed and message added to chat');
                     this.cdr.detectChanges();
                     break;
 
@@ -676,6 +712,9 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         // Clear input
         this.chatInput = '';
 
+        // Auto-scroll to bottom after adding user message
+        this.scrollToBottom();
+
         // Send message to backend
         const messageRequest = {
             content: messageContent,
@@ -706,5 +745,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             console.log('Message sent successfully:', response);
             // The response should trigger the SSE stream for the agent's reply
         });
+    }
+
+    // Auto-scroll to bottom for ChatGPT-like behavior
+    private scrollToBottom(): void {
+        try {
+            setTimeout(() => {
+                if (this.messagesContainer) {
+                    const element = this.messagesContainer.nativeElement;
+                    element.scrollTop = element.scrollHeight;
+                }
+            }, 100); // Small delay to allow DOM updates
+        } catch (err) {
+            console.log('Error scrolling to bottom:', err);
+        }
     }
 }

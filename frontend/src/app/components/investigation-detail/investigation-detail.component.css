@@ -597,3 +597,24 @@
 .chat-input-container .text-muted .fas {
     font-size: 0.75rem;
 }
+
+/* ChatGPT-style typing cursor animation */
+.typing-cursor {
+    display: inline-block;
+    animation: blink 1s infinite;
+    color: #28a745;
+    font-weight: bold;
+}
+
+@keyframes blink {
+
+    0%,
+    50% {
+        opacity: 1;
+    }
+
+    51%,
+    100% {
+        opacity: 0;
+    }
+}
