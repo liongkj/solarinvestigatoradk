@@ -1,5 +1,6 @@
 from datetime import date
 
+from adk.callbacks.summarizer import summarize_agent_output_callback
 from adk.models.investigation import Investigation
 from google.adk.agents import Agent, ParallelAgent, SequentialAgent
 from google.adk.agents.callback_context import CallbackContext
@@ -99,11 +100,10 @@ parallel_pipeline = ParallelAgent(
     ],
 )
 
-def store_inverter_device_id_and_capacity_peak(
-    tool_context: ToolContext, data : dict
-):
+
+def store_inverter_device_id_and_capacity_peak(tool_context: ToolContext, data: dict):
     """Store inverter device id and capacity peak in the tool context state.
-    
+
     args:
         tool_context (ToolContext): The context of the tool where the state is stored.
         data (dict): A dictionary containing inverter device ids and their corresponding capacity peaks.
@@ -113,19 +113,15 @@ def store_inverter_device_id_and_capacity_peak(
     tool_context.state["inverter_device_id_and_capacity_peak"] = str(data)
 
 
-
 planner_agent = Agent(
     name="planner_agent",
     model="gemini-2.5-flash-preview-05-20",
     instruction=return_instruction_planner(),
     description="You are an expert planner",
     output_key="planner_agent_output",
+    after_agent_callback=summarize_agent_output_callback,
     generate_content_config=types.GenerateContentConfig(temperature=0.1),
-    tools=[
-        tools[5],
-        tools[6],
-        store_inverter_device_id_and_capacity_peak
-    ],
+    tools=[tools[5], tools[6], store_inverter_device_id_and_capacity_peak],
 )
 
 
@@ -145,12 +141,12 @@ planner_agent = Agent(
 #     return root_agent
 
 root_agent = SequentialAgent(
-        name="problem_finder",
-        sub_agents=[
-            planner_agent,
-            daily_pr_agent,
-            parallel_pipeline,
-            aggregator_agent,
-        ],
-        # before_agent_callback=setup,
-    )
+    name="problem_finder",
+    sub_agents=[
+        planner_agent,
+        # daily_pr_agent,
+        # parallel_pipeline,
+        # aggregator_agent,
+    ],
+    # before_agent_callback=setup,
+)

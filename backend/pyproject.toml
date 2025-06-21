@@ -32,6 +32,8 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.11.7",
     "websockets>=15.0.1",
+    "scikit-learn>=1.7.0",
+    "statsmodels>=0.14.4",
 ]
 
 [dependency-groups]

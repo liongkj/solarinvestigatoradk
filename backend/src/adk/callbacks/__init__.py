@@ -1,3 +1,3 @@
 """ADK Callbacks module"""
 
-__all__ = []
+__all__ = ["s"]
