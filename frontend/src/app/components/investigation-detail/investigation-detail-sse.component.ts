@@ -8,6 +8,18 @@ import { asapScheduler } from 'rxjs';
 import { InvestigationService, SSEEvent } from '../../services/investigation.service';
 import { Investigation, AgentMessage, InvestigationStatus, AgentMessageType, MessageRequest } from '../../models/investigation';
 
+/**
+ * InvestigationDetailComponent - Real-time investigation view with SSE streaming
+ * 
+ * TIMESTAMP HANDLING STRATEGY:
+ * - All timestamps should originate from the backend for consistency and proper ordering
+ * - Frontend-generated timestamps are only used as fallbacks when backend timestamps are unavailable
+ * - SSE events provide authoritative timestamps that should be preserved
+ * - Message ordering is handled by backend timestamps + sequence numbers for reliability
+ * - After refresh, sequence numbers are assigned with large gaps (1000, 2000, 3000...) to avoid conflicts
+ * - New SSE messages get higher sequence numbers to maintain chronological order
+ */
+
 interface ProgressStep {
     name: string;
     completed: boolean;
@@ -27,7 +39,6 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     investigationId: string = '';
     isLoading = false;
     error: string | null = null;
-    showAllThoughts = false;
 
     // Private BehaviorSubjects for internal state management
     private realTimeEventsSubject = new BehaviorSubject<SSEEvent[]>([]);
@@ -63,13 +74,33 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     // Computed observables
     public readonly visibleMessages$ = this.chatMessages$.pipe(
-        map(messages => {
-            console.log('Computing visibleMessages, total messages:', messages.length);
-            const filtered = messages.filter(msg => this.shouldShowMessage(msg));
-            console.log('Filtered messages:', filtered.length);
-            return filtered;
-        }),
-        tap(visible => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
+        // map(messages => {
+        //     console.log('Computing visibleMessages, total messages:', messages.length);
+        //     // const filtered = messages.filter(msg => this.shouldShowMessage(msg));
+
+        //     // Sort by backend timestamp primarily, sequence number as secondary
+        //     // This ensures reliable ordering based on authoritative backend timestamps
+        //     const sorted = filtered.sort((a, b) => {
+        //         // Primary sort: backend timestamp (authoritative)
+        //         const timeA = new Date(a.timestamp).getTime();
+        //         const timeB = new Date(b.timestamp).getTime();
+
+        //         if (timeA !== timeB) {
+        //             console.log(`🔍 Sorting by timestamp: ${a.message_type}(${timeA}) vs ${b.message_type}(${timeB}) = ${timeA - timeB}`);
+        //             return timeA - timeB; // Ascending order (oldest first)
+        //         }
+
+        //         // Secondary sort: sequence number for messages with identical timestamps
+        //         const seqA = a.metadata?.['sequence'] || 0;
+        //         const seqB = b.metadata?.['sequence'] || 0;
+        //         console.log(`🔍 Sorting by sequence (same timestamp): ${a.message_type}(seq:${seqA}) vs ${b.message_type}(seq:${seqB}) = ${seqA - seqB}`);
+        //         return seqA - seqB; // Ascending order (earliest sequence first)
+        //     });
+
+        //     console.log('Filtered and sorted messages by backend timestamp:', sorted.length);
+        //     return sorted;
+        // }),
+        // tap(visible => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
         shareReplay(1)
     );
 
@@ -89,20 +120,26 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     // Progress tracking
     progressSteps: ProgressStep[] = [
-        { name: 'Investigation Started', completed: false, timestamp: null },
-        { name: 'Data Agent Analysis', completed: false, timestamp: null },
-        { name: 'Alert Agent Review', completed: false, timestamp: null },
-        { name: 'Coordinator Summary', completed: false, timestamp: null },
+        { name: 'Investigation Started', completed: true, timestamp: null },
+        { name: 'Planning', completed: false, timestamp: null },
+        { name: 'Evidence Collection', completed: false, timestamp: null },
+        { name: 'Analyzing', completed: false, timestamp: null },
         { name: 'Investigation Complete', completed: false, timestamp: null }
     ];
 
     // UI Summary support
-    showUiSummaries = true;
+    showUiSummaries = false;
     uiSummaryCache: Map<string, string> = new Map();
 
     // Streaming text support
     currentStreamingText = '';
     isStreaming = false;
+
+    // Message sequence counter for reliable ordering
+    private messageSequenceCounter = 0;
+
+    // Streaming timestamp from backend
+    public streamingStartTimestamp: string | null = null;
 
     constructor(
         private route: ActivatedRoute,
@@ -196,8 +233,35 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     messages = response.messages || [];
                 }
 
-                console.log('Initial chat messages loaded:', messages.length);
-                this.chatMessagesSubject.next(messages);
+                // IMPORTANT: Sort by backend timestamp only, don't assign new sequence numbers
+                // Backend timestamps are authoritative and should preserve original order
+                const sortedMessages = messages.sort((a, b) => {
+                    const timeA = new Date(a.timestamp).getTime();
+                    const timeB = new Date(b.timestamp).getTime();
+                    return timeA - timeB;
+                });
+
+                // Set sequence counter to start after existing messages to avoid conflicts
+                // This ensures new SSE messages don't interfere with loaded message order
+                this.messageSequenceCounter = sortedMessages.length * 1000; // Use large gaps to avoid conflicts
+
+                sortedMessages.forEach((message, index) => {
+                    if (!message.metadata) {
+                        message.metadata = {};
+                    }
+                    // Preserve original sequence if available, otherwise assign based on timestamp order
+                    if (!message.metadata['sequence']) {
+                        message.metadata['sequence'] = (index + 1) * 1000; // Use 1000, 2000, 3000... for loaded messages
+                    }
+                });
+
+                console.log('Initial chat messages loaded with preserved timestamps:', {
+                    count: messages.length,
+                    sequenceCounterStart: this.messageSequenceCounter,
+                    firstTimestamp: sortedMessages[0]?.timestamp,
+                    lastTimestamp: sortedMessages[sortedMessages.length - 1]?.timestamp
+                });
+                this.chatMessagesSubject.next(sortedMessages);
             });
     }
 
@@ -212,28 +276,29 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         }
 
         const stats = this.investigation.agent_stats;
-        const now = new Date().toISOString();
+        // Use investigation update time or current time as fallback
+        const timestamp = this.investigation.updated_at || new Date().toISOString();
 
         // Mark steps as completed based on agent stats
         if (stats.total_events > 0) {
             this.progressSteps[0].completed = true;
-            this.progressSteps[0].timestamp = now;
+            this.progressSteps[0].timestamp = timestamp;
         }
 
         if (stats.total_events > 2) {
             this.progressSteps[1].completed = true;
-            this.progressSteps[1].timestamp = now;
+            this.progressSteps[1].timestamp = timestamp;
         }
 
         if (stats.total_events > 5) {
             this.progressSteps[2].completed = true;
-            this.progressSteps[2].timestamp = now;
+            this.progressSteps[2].timestamp = timestamp;
         }
 
         if (this.investigation.status === InvestigationStatus.COMPLETED) {
             this.progressSteps.forEach(step => {
                 step.completed = true;
-                if (!step.timestamp) step.timestamp = now;
+                if (!step.timestamp) step.timestamp = timestamp;
             });
         }
     }
@@ -242,22 +307,23 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         if (!this.investigation?.agent_stats) return;
 
         const stats = this.investigation.agent_stats;
-        const now = new Date().toISOString();
+        // Use investigation update time or current time as fallback
+        const timestamp = this.investigation.updated_at || new Date().toISOString();
 
         // Use available stats properties
         if (stats.agent_responses > 0) {
             this.progressSteps[1].completed = true;
-            this.progressSteps[1].timestamp = now;
+            this.progressSteps[1].timestamp = timestamp;
         }
 
         if (stats.tool_calls > 0) {
             this.progressSteps[2].completed = true;
-            this.progressSteps[2].timestamp = now;
+            this.progressSteps[2].timestamp = timestamp;
         }
 
         if (stats.total_events > 5) {
             this.progressSteps[3].completed = true;
-            this.progressSteps[3].timestamp = now;
+            this.progressSteps[3].timestamp = timestamp;
         }
     }
 
@@ -326,14 +392,20 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     if (event.message) {
                         // Add new message to chat using reactive stream
                         const currentMessages = this.chatMessagesSubject.value;
-                        const newMessages = [...currentMessages, {
+                        const newMessage = {
                             id: event.message.id,
                             investigation_id: this.investigationId,
                             message_type: event.message.message_type,
                             content: event.message.content,
-                            timestamp: event.message.timestamp,
-                            metadata: {}
-                        }];
+                            timestamp: event.message.timestamp, // Use backend timestamp directly
+                            metadata: {
+                                sequence: ++this.messageSequenceCounter // Assign sequence number for reliable ordering
+                            }
+                        };
+
+                        console.log(`🔍 Adding SSE message: ${newMessage.message_type} with backend timestamp: ${newMessage.timestamp}, sequence: ${newMessage.metadata.sequence}`);
+
+                        const newMessages = [...currentMessages, newMessage];
                         this.chatMessagesSubject.next(newMessages);
                         console.log('💬 Updated chatMessagesSubject:', newMessages.length, 'messages');
                     }
@@ -403,10 +475,12 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     this.isStreamingSubject.next(true);
                     this.isStreaming = true; // Keep for template compatibility
 
-                    // If this is the first chunk, reset the text
+                    // If this is the first chunk, reset the text and capture timestamp
                     if (event.chunk_info && event.chunk_info.chunk_index === 1) {
                         this.currentStreamingText = '';
                         this.streamingTextSubject.next('');
+                        // Capture the timestamp from the first streaming chunk
+                        this.streamingStartTimestamp = event.timestamp;
                     }
 
                     // Update streaming text - ChatGPT style incremental display
@@ -443,12 +517,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
                         // Add the complete message to chat history as normal message
                         const completedMessage: AgentMessage = {
-                            id: `agent-${Date.now()}`,
+                            id: event.message?.id || `agent-${Date.now()}`,
                             investigation_id: this.investigationId,
                             message_type: AgentMessageType.AGENT,
                             content: event.content,
-                            timestamp: new Date().toISOString(),
-                            metadata: {}
+                            timestamp: event.timestamp, // Use backend timestamp directly - no fallback to current time
+                            metadata: {
+                                sequence: ++this.messageSequenceCounter // Assign sequence number for reliable ordering
+                            }
                         };
 
                         const currentMessages = this.chatMessagesSubject.value;
@@ -457,10 +533,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                         // Auto-scroll to show the new complete message
                         this.scrollToBottom();
 
-                        // Clear streaming text after adding to chat
+                        // Clear streaming text and timestamp after adding to chat
                         setTimeout(() => {
                             this.currentStreamingText = '';
                             this.streamingTextSubject.next('');
+                            this.streamingStartTimestamp = null; // Clear the streaming timestamp
                         }, 100); // Small delay to allow smooth transition
                     }
 
@@ -568,16 +645,16 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return this.investigation?.status === InvestigationStatus.FAILED;
     }
 
-    toggleAllThoughts(): void {
-        this.showAllThoughts = !this.showAllThoughts;
-    }
+    // toggleAllThoughts(): void {
+    //     this.showAllThoughts = !this.showAllThoughts;
+    // }
 
-    shouldShowMessage(message: AgentMessage): boolean {
-        if (this.showAllThoughts) {
-            return true;
-        }
-        return message.message_type !== AgentMessageType.THINKING;
-    }
+    // shouldShowMessage(message: AgentMessage): boolean {
+    //     if (this.showAllThoughts) {
+    //         return true;
+    //     }
+    //     return message.message_type !== AgentMessageType.THINKING;
+    // }
 
     formatTimestamp(timestamp: string): string {
         return new Date(timestamp).toLocaleString();
@@ -665,8 +742,10 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return !!(message.metadata?.['ui_summary']);
     }
 
-    toggleContentDisplay(): void {
-        this.showUiSummaries = !this.showUiSummaries;
+
+
+    setContentView(showSummaries: boolean): void {
+        this.showUiSummaries = showSummaries;
     }
 
     loadInvestigationDetailsSilently(): void {
@@ -695,27 +774,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         const messageContent = this.chatInput.trim();
         this.isSendingMessage = true;
 
-        // Add user message to chat immediately
-        const userMessage: AgentMessage = {
-            id: `user-${Date.now()}`,
-            investigation_id: this.investigationId,
-            message_type: AgentMessageType.USER,
-            content: messageContent,
-            timestamp: new Date().toISOString(),
-            metadata: {}
-        };
-
-        // Add to messages
-        const currentMessages = this.chatMessagesSubject.value;
-        this.chatMessagesSubject.next([...currentMessages, userMessage]);
-
-        // Clear input
+        // Clear input first
         this.chatInput = '';
 
-        // Auto-scroll to bottom after adding user message
-        this.scrollToBottom();
-
-        // Send message to backend
+        // IMPORTANT: Send message to backend first to get authoritative timestamp
+        // This ensures proper message ordering and consistency across clients
         const messageRequest = {
             content: messageContent,
             message_type: AgentMessageType.USER
@@ -728,14 +791,16 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             }),
             catchError((error: any) => {
                 console.error('Error sending message:', error);
-                // Add error message to chat
+                // Add error message to chat with backend timestamp if available
                 const errorMessage: AgentMessage = {
                     id: `error-${Date.now()}`,
                     investigation_id: this.investigationId,
                     message_type: AgentMessageType.SYSTEM,
                     content: 'Error sending message. Please try again.',
-                    timestamp: new Date().toISOString(),
-                    metadata: {}
+                    timestamp: error?.timestamp || new Date().toISOString(), // Use backend timestamp if available, fallback only for errors
+                    metadata: {
+                        sequence: ++this.messageSequenceCounter
+                    }
                 };
                 const currentMessages = this.chatMessagesSubject.value;
                 this.chatMessagesSubject.next([...currentMessages, errorMessage]);
@@ -743,6 +808,28 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             })
         ).subscribe((response: any) => {
             console.log('Message sent successfully:', response);
+
+            // Add user message to chat using backend response timestamp if available
+            const userMessage: AgentMessage = {
+                id: response?.id || `user-${Date.now()}`,
+                investigation_id: this.investigationId,
+                message_type: AgentMessageType.USER,
+                content: messageContent,
+                timestamp: response?.timestamp || new Date().toISOString(), // Use backend timestamp when available, fallback for user messages only
+                metadata: {
+                    sequence: ++this.messageSequenceCounter
+                }
+            };
+
+            console.log(`🔍 Adding user message with backend timestamp: ${userMessage.timestamp}, sequence: ${userMessage.metadata?.['sequence']}`);
+
+            // Add to messages
+            const currentMessages = this.chatMessagesSubject.value;
+            this.chatMessagesSubject.next([...currentMessages, userMessage]);
+
+            // Auto-scroll to bottom after adding user message
+            this.scrollToBottom();
+
             // The response should trigger the SSE stream for the agent's reply
         });
     }

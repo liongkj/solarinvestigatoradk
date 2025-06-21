@@ -8,8 +8,8 @@
                         <i class="fas fa-arrow-left"></i> Back to Dashboard
                     </button>
                     <h2 class="mb-0">Investigation Details</h2>
-                    <span class="badge bg-success ms-2" *ngIf="sseSubscription">
-                        <i class="fas fa-satellite-dish"></i> Live Updates
+                    <span class="badge bg-success ms-2" *ngIf="sseSubscription && isStreaming">
+                        <i class="fas fa-satellite-dish"></i> Live
                     </span>
                 </div>
                 <div *ngIf="investigation">
@@ -128,19 +128,18 @@
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="card-title mb-0">Investigation Progress</h5>
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-secondary" [class.active]="showUiSummaries"
-                                    (click)="toggleContentDisplay()">
-                                    Summaries
-                                </button>
-                                <button class="btn btn-outline-secondary" [class.active]="!showUiSummaries"
-                                    (click)="toggleContentDisplay()">
-                                    Full Content
-                                </button>
-                                <button class="btn btn-outline-secondary" [class.active]="showAllThoughts"
-                                    (click)="toggleAllThoughts()">
-                                    Show Thinking
-                                </button>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Content display toggle">
+                                <input type="radio" class="btn-check" name="contentView" id="fullContent"
+                                    [checked]="!showUiSummaries" (change)="setContentView(false)">
+                                <label class="btn btn-outline-primary" for="fullContent">
+                                    <i class="fas fa-align-left me-1"></i>Full Content
+                                </label>
+
+                                <input type="radio" class="btn-check" name="contentView" id="summaries"
+                                    [checked]="showUiSummaries" (change)="setContentView(true)">
+                                <label class="btn btn-outline-primary" for="summaries">
+                                    <i class="fas fa-list-ul me-1"></i>Summaries
+                                </label>
                             </div>
                         </div>
                         <div class="card-body chat-container">
@@ -148,42 +147,13 @@
                             <!-- Messages Area -->
                             <div class="messages-area" #messagesContainer>
 
-                                <!-- Streaming Message (ChatGPT style) -->
-                                <div *ngIf="(isStreaming$ | async) && (streamingText$ | async)"
-                                    class="message-card alert alert-success mb-2">
-                                    <div class="d-flex align-items-start">
-                                        <!-- Agent Icon -->
-                                        <div class="me-2">
-                                            <i class="fas fa-robot fa-lg text-success"></i>
-                                        </div>
-
-                                        <div class="flex-grow-1">
-                                            <!-- Message Header -->
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <h6 class="mb-0">
-                                                    <span class="badge bg-success me-2">Agent</span>
-                                                    <small class="text-muted">responding...</small>
-                                                </h6>
-                                                <small class="text-muted">{{ getCurrentTime() }}</small>
-                                            </div>
-
-                                            <!-- Streaming Content -->
-                                            <div class="message-content"
-                                                style="white-space: pre-wrap; line-height: 1.5;">
-                                                {{ streamingText$ | async }}
-                                                <span class="typing-cursor">|</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-
                                 <div *ngIf="(visibleMessages$ | async)?.length === 0"
                                     class="text-center text-muted py-5">
                                     <i class="fas fa-comments fa-3x mb-3"></i>
                                     <p>No messages yet. The investigation will start soon...</p>
                                 </div>
 
+                                <!-- Regular chat messages first (in chronological order) -->
                                 <div *ngFor="let message of visibleMessages$ | async" class="message-card alert mb-2"
                                     [class.alert-primary]="message.message_type === 'user'"
                                     [class.alert-success]="message.message_type === 'agent'"
@@ -198,8 +168,7 @@
                                                 [class.fa-robot]="message.message_type === 'agent'"
                                                 [class.fa-cog]="message.message_type === 'system'"
                                                 [class.fa-brain]="message.message_type === 'thinking'"
-                                                [class.fa-wrench]="message.message_type === 'tool_call'"
-                                                [class.fa-check-circle]="message.message_type === 'tool_result'"
+                                                [class.fa-tools]="message.message_type === 'tool_call' || message.message_type === 'tool_result'"
                                                 [class.text-primary]="message.message_type === 'user'"
                                                 [class.text-success]="message.message_type === 'agent'"
                                                 [class.text-secondary]="message.message_type === 'system'"
@@ -210,22 +179,53 @@
 
                                         <div class="flex-grow-1">
                                             <!-- Message Header -->
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <h6 class="mb-0 fs-6">
-                                                    <strong>{{ message.message_type | titlecase }}</strong>
-                                                    <span *ngIf="hasUiSummary(message)" class="badge bg-info ms-2">
-                                                        <i class="fas fa-magic"></i> Summary
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="mb-0">
+                                                    <span class="badge me-2"
+                                                        [class.bg-primary]="message.message_type === 'user'"
+                                                        [class.bg-success]="message.message_type === 'agent'"
+                                                        [class.bg-secondary]="message.message_type === 'system'"
+                                                        [class.bg-warning]="message.message_type === 'thinking'"
+                                                        [class.bg-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'">
+                                                        {{ message.message_type | titlecase }}
                                                     </span>
                                                 </h6>
                                                 <small class="text-muted">{{ formatTimestamp(message.timestamp)
                                                     }}</small>
+                                            </div> <!-- Message Content -->
+                                            <div class="message-content"
+                                                style="white-space: pre-wrap; line-height: 1.5;">
+                                                {{ getDisplayContent(message) }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Streaming Message (ChatGPT style) - Shows AFTER existing messages -->
+                                <div *ngIf="(isStreaming$ | async) && (streamingText$ | async)"
+                                    class="message-card alert alert-success mb-2">
+                                    <div class="d-flex align-items-start">
+                                        <!-- Agent Icon -->
+                                        <div class="me-2">
+                                            <i class="fas fa-robot fa-lg text-success"></i>
+                                        </div>
+
+                                        <div class="flex-grow-1">
+                                            <!-- Message Header -->
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="mb-0">
+                                                    <span class="badge bg-success me-2">Agent</span>
+                                                </h6>
+                                                <small class="text-muted">{{ streamingStartTimestamp ?
+                                                    formatTimestamp(streamingStartTimestamp) : 'responding...'
+                                                    }}</small>
                                             </div>
 
-                                            <!-- Message Content -->
-                                            <div class="message-content">
-                                                <div [innerHTML]="getDisplayContent(message)" class="message-text"
-                                                    style="white-space: pre-wrap; word-wrap: break-word;">
-                                                </div>
+                                            <!-- Streaming Content -->
+                                            <div class="message-content"
+                                                style="white-space: pre-wrap; line-height: 1.5;">
+                                                {{ streamingText$ | async }}
+                                                <!-- <span class="typing-cursor">|</span> -->
                                             </div>
                                         </div>
                                     </div>
@@ -261,6 +261,3 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
