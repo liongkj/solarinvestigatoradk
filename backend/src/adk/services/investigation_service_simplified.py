@@ -317,12 +317,73 @@ class SimplifiedInvestigationService:
             final_response = None
             event_count = 0
             accumulated_text = ""
-
+            last_active_agent = None
+            last_status_sent = None
             async for event in runner.run_async(
                 user_id=self.default_user_id,
                 session_id=session_id,
                 new_message=user_content,
             ):
+                # Send status update only when agent changes (not for every event)
+                if event.author != last_active_agent:
+                    last_active_agent = event.author
+
+                    # Determine meaningful status based on agent and event content
+                    if event.author == "user":
+                        current_status = "Processing user input"
+
+                    elif event.get_function_calls():
+                        # Agent is calling tools
+                        tool_names = [call.name for call in event.get_function_calls()]
+                        tool_name = tool_names[0] if tool_names else "unknown tool"
+                        current_status = f"Using {tool_name}"
+                        map_tool_names = {
+                            "list_inverters_for_plant": "Looking up inverters for current plant..."
+                        }
+                        if tool_name in map_tool_names:
+                            tool_name_friendly = map_tool_names[tool_name]
+                            event_data = {
+                                "investigation_id": investigation.id,
+                                "timestamp": datetime.now().isoformat(),
+                                "type": "streaming_text_chunk",
+                                "content": tool_name_friendly,
+                                "full_content": tool_name_friendly,
+                                "partial": True,
+                            }
+
+                            # Queue the chunk
+                            await self._queue_sse_event(investigation.id, event_data)
+                    elif (
+                        event.content
+                        and event.content.parts
+                        and event.content.parts[0].text
+                    ):
+                        # Agent is generating text/analysis
+                        text_preview = event.content.parts[0].text[:50].strip()
+                        if text_preview:
+                            current_status = f"Agent {event.author} analyzing data"
+                        else:
+                            current_status = f"Agent {event.author} processing"
+                    else:
+                        current_status = f"Agent {event.author} working"
+
+                    # Only send if status actually changed
+                    if current_status != last_status_sent:
+                        logger.info(
+                            f"Sending progress update for {investigation.id}: '{current_status}'"
+                        )
+                        await self._queue_sse_event(
+                            investigation.id,
+                            {
+                                "type": "progress_update",  # Changed from status_update
+                                "investigation_id": investigation.id,
+                                "current_activity": current_status,  # Descriptive status
+                                "formal_status": "running",  # Keep formal status
+                                "timestamp": datetime.now().isoformat(),
+                            },
+                        )
+                        last_status_sent = current_status
+
                 event_count += 1
                 logger.info(
                     f"Processing ADK event #{event_count} for investigation {investigation.id}: {event.id}"

@@ -13,9 +13,15 @@
                     </span>
                 </div>
                 <div *ngIf="investigation">
-                    <span class="badge fs-6" [class]="getStatusClass()">
-                        {{ investigation.status | titlecase }}
-                    </span>
+                    <div class="d-flex flex-column align-items-end">
+                        <span class="badge fs-6" [class]="getStatusClass()">
+                            {{ investigation.status | titlecase }}
+                        </span>
+                        <small class="text-muted mt-1"
+                            *ngIf="(currentActivity$ | async) && investigation.status === 'running'">
+                            <i class="fas fa-cog fa-spin me-1"></i>{{ currentActivity$ | async }}
+                        </small>
+                    </div>
                 </div>
             </div>
 
@@ -74,6 +80,15 @@
                                     [attr.aria-valuenow]="getProgressPercentage()">
                                     {{ getProgressPercentage() }}%
                                 </div>
+                            </div>
+
+                            <!-- Current Activity Indicator -->
+                            <div *ngIf="(currentActivity$ | async) && investigation.status === 'running'"
+                                class="current-activity-indicator mb-3 p-2 bg-light rounded">
+                                <small class="text-primary">
+                                    <i class="fas fa-cog fa-spin me-2"></i>
+                                    <strong>Current Activity:</strong> {{ currentActivity$ | async }}
+                                </small>
                             </div>
 
                             <div class="progress-steps">

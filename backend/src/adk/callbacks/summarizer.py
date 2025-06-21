@@ -285,7 +285,6 @@ def summarize_agent_output_callback(callback_context: CallbackContext) -> None:
     print(f"\n[Callback] Exiting agent: {agent_name} (Inv: {invocation_id})")
     print(f"[Callback] Current State: {current_state}")
 
-    print(f"[Callback] UI Output: {current_state['ui_output']}")
     if agent_output := current_state.get(f"{agent_name}_output"):
 
         summary = _run_summarizer_agent(agent_name, agent_output)

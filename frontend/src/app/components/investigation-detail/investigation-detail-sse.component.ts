@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone, ChangeDetectio
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { interval, Subscription, Subject, of, BehaviorSubject, Observable } from 'rxjs';
+import { interval, Subscription, Subject, of, BehaviorSubject, Observable, combineLatest } from 'rxjs';
 import { takeUntil, switchMap, catchError, finalize, tap, observeOn, map, shareReplay } from 'rxjs/operators';
 import { asapScheduler } from 'rxjs';
 import { InvestigationService, SSEEvent } from '../../services/investigation.service';
@@ -47,6 +47,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     private streamingTextSubject = new BehaviorSubject<string>('');
     private isStreamingSubject = new BehaviorSubject<boolean>(false);
 
+    // Track current activity from backend progress updates (using BehaviorSubject to maintain state)
+    private currentActivitySubject = new BehaviorSubject<string>('Initializing...');
+    public readonly currentActivity$ = this.currentActivitySubject.asObservable();
+
+    // Chat message filtering - make reactive
+    private showAllThoughtsSubject = new BehaviorSubject<boolean>(false);
+    public readonly showAllThoughts$ = this.showAllThoughtsSubject.asObservable();
+
     // Public observables for template consumption - use asObservable() to prevent external modification
     public readonly realTimeEvents$ = this.realTimeEventsSubject.asObservable().pipe(
         tap(events => console.log('realTimeEvents$ emitting:', events.length, 'events')),
@@ -73,34 +81,43 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     );
 
     // Computed observables
-    public readonly visibleMessages$ = this.chatMessages$.pipe(
-        // map(messages => {
-        //     console.log('Computing visibleMessages, total messages:', messages.length);
-        //     // const filtered = messages.filter(msg => this.shouldShowMessage(msg));
+    public readonly visibleMessages$ = combineLatest([
+        this.chatMessages$,
+        this.showAllThoughts$
+    ]).pipe(
+        map(([messages, showAllThoughts]: [AgentMessage[], boolean]) => {
+            console.log('Computing visibleMessages, total messages:', messages.length, 'showAllThoughts:', showAllThoughts);
+            // Filter messages based on showAllThoughts setting
+            const filtered = messages.filter((msg: AgentMessage) => {
+                if (showAllThoughts) {
+                    return true;
+                }
+                return msg.message_type !== AgentMessageType.THINKING;
+            });
 
-        //     // Sort by backend timestamp primarily, sequence number as secondary
-        //     // This ensures reliable ordering based on authoritative backend timestamps
-        //     const sorted = filtered.sort((a, b) => {
-        //         // Primary sort: backend timestamp (authoritative)
-        //         const timeA = new Date(a.timestamp).getTime();
-        //         const timeB = new Date(b.timestamp).getTime();
+            // Sort by backend timestamp primarily, sequence number as secondary
+            // This ensures reliable ordering based on authoritative backend timestamps
+            const sorted = filtered.sort((a: AgentMessage, b: AgentMessage) => {
+                // Primary sort: backend timestamp (authoritative)
+                const timeA = new Date(a.timestamp).getTime();
+                const timeB = new Date(b.timestamp).getTime();
 
-        //         if (timeA !== timeB) {
-        //             console.log(`🔍 Sorting by timestamp: ${a.message_type}(${timeA}) vs ${b.message_type}(${timeB}) = ${timeA - timeB}`);
-        //             return timeA - timeB; // Ascending order (oldest first)
-        //         }
+                if (timeA !== timeB) {
+                    console.log(`🔍 Sorting by timestamp: ${a.message_type}(${timeA}) vs ${b.message_type}(${timeB}) = ${timeA - timeB}`);
+                    return timeA - timeB; // Ascending order (oldest first)
+                }
 
-        //         // Secondary sort: sequence number for messages with identical timestamps
-        //         const seqA = a.metadata?.['sequence'] || 0;
-        //         const seqB = b.metadata?.['sequence'] || 0;
-        //         console.log(`🔍 Sorting by sequence (same timestamp): ${a.message_type}(seq:${seqA}) vs ${b.message_type}(seq:${seqB}) = ${seqA - seqB}`);
-        //         return seqA - seqB; // Ascending order (earliest sequence first)
-        //     });
+                // Secondary sort: sequence number for messages with identical timestamps
+                const seqA = a.metadata?.['sequence'] || 0;
+                const seqB = b.metadata?.['sequence'] || 0;
+                console.log(`🔍 Sorting by sequence (same timestamp): ${a.message_type}(seq:${seqA}) vs ${b.message_type}(seq:${seqB}) = ${seqA - seqB}`);
+                return seqA - seqB; // Ascending order (earliest sequence first)
+            });
 
-        //     console.log('Filtered and sorted messages by backend timestamp:', sorted.length);
-        //     return sorted;
-        // }),
-        // tap(visible => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
+            console.log('Filtered and sorted messages by backend timestamp:', sorted.length);
+            return sorted;
+        }),
+        tap((visible: AgentMessage[]) => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
         shareReplay(1)
     );
 
@@ -118,14 +135,18 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // Auto-scroll support for ChatGPT-like behavior
     @ViewChild('messagesContainer', { static: false }) messagesContainer?: ElementRef;
 
-    // Progress tracking
+    // Progress tracking - Dynamic steps based on actual agent activity
     progressSteps: ProgressStep[] = [
-        { name: 'Investigation Started', completed: true, timestamp: null },
-        { name: 'Planning', completed: false, timestamp: null },
-        { name: 'Evidence Collection', completed: false, timestamp: null },
-        { name: 'Analyzing', completed: false, timestamp: null },
+        { name: 'Investigation Started', completed: false, timestamp: null },
+        { name: 'Agent Analysis', completed: false, timestamp: null },
+        { name: 'Tool Execution', completed: false, timestamp: null },
+        { name: 'Data Processing', completed: false, timestamp: null },
         { name: 'Investigation Complete', completed: false, timestamp: null }
     ];
+
+    // Track progress step history for dynamic updates
+    private agentActivities: Set<string> = new Set();
+    private toolActivities: Set<string> = new Set();
 
     // UI Summary support
     showUiSummaries = false;
@@ -166,7 +187,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             console.log('💬 chatMessages$ observable emitted to subscriber:', messages.length, 'messages');
         });
 
-        this.visibleMessages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
+        this.visibleMessages$.pipe(takeUntil(this.destroy$)).subscribe((messages: AgentMessage[]) => {
             console.log('👁️ visibleMessages$ observable emitted to subscriber:', messages.length, 'visible messages');
         });
 
@@ -191,6 +212,8 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         this.workordersSubject.complete();
         this.streamingTextSubject.complete();
         this.isStreamingSubject.complete();
+        this.currentActivitySubject.complete();
+        this.showAllThoughtsSubject.complete();
     }
 
     loadInvestigationDetails(): void {
@@ -211,6 +234,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 if (investigation) {
                     console.log('Investigation loaded:', investigation);
                     this.investigation = investigation;
+                    this.initializeProgressSteps();
                     this.updateProgressSteps();
                     this.loadChatMessages();
                 }
@@ -261,6 +285,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     firstTimestamp: sortedMessages[0]?.timestamp,
                     lastTimestamp: sortedMessages[sortedMessages.length - 1]?.timestamp
                 });
+                console.log('🔥 Setting chatMessagesSubject.next with', sortedMessages.length, 'messages');
                 this.chatMessagesSubject.next(sortedMessages);
             });
     }
@@ -303,6 +328,20 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         }
     }
 
+    private initializeProgressSteps(): void {
+        if (this.investigation) {
+            // Mark investigation as started when investigation is loaded
+            this.progressSteps[0].completed = true;
+            this.progressSteps[0].timestamp = this.investigation.created_at;
+
+            // Mark completion if investigation is completed
+            if (this.investigation.status === 'completed') {
+                this.progressSteps[4].completed = true;
+                this.progressSteps[4].timestamp = this.investigation.completed_at || this.investigation.updated_at;
+            }
+        }
+    }
+
     private updateProgressStepsFromAgentStats(): void {
         if (!this.investigation?.agent_stats) return;
 
@@ -324,6 +363,62 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         if (stats.total_events > 5) {
             this.progressSteps[3].completed = true;
             this.progressSteps[3].timestamp = timestamp;
+        }
+    }
+
+    private updateDynamicProgressSteps(currentActivity: string): void {
+        console.log('🔄 Updating progress steps for activity:', currentActivity);
+        const timestamp = new Date().toISOString();
+
+        // Mark investigation as started
+        if (!this.progressSteps[0].completed) {
+            this.progressSteps[0].completed = true;
+            this.progressSteps[0].timestamp = timestamp;
+            console.log('✅ Marked investigation as started');
+        }
+
+        // Track agent activities - match backend patterns
+        if (currentActivity.includes('Agent') && (currentActivity.includes('analyzing') || currentActivity.includes('processing') || currentActivity.includes('working'))) {
+            console.log('🤖 Agent activity detected:', currentActivity);
+            this.agentActivities.add(currentActivity);
+            if (!this.progressSteps[1].completed) {
+                this.progressSteps[1].completed = true;
+                this.progressSteps[1].timestamp = timestamp;
+                this.progressSteps[1].name = `Agent Analysis (${this.agentActivities.size} agents active)`;
+                console.log('✅ Marked agent analysis as completed');
+            } else {
+                this.progressSteps[1].name = `Agent Analysis (${this.agentActivities.size} agents active)`;
+            }
+        }
+
+        // Track tool activities - match backend patterns
+        if (currentActivity.includes('Using') || (currentActivity.includes('Agent') && currentActivity.includes('calling tools'))) {
+            console.log('🔧 Tool activity detected:', currentActivity);
+            this.toolActivities.add(currentActivity);
+            if (!this.progressSteps[2].completed) {
+                this.progressSteps[2].completed = true;
+                this.progressSteps[2].timestamp = timestamp;
+                this.progressSteps[2].name = `Tool Execution (${this.toolActivities.size} tools used)`;
+                console.log('✅ Marked tool execution as completed');
+            } else {
+                this.progressSteps[2].name = `Tool Execution (${this.toolActivities.size} tools used)`;
+            }
+        }
+
+        // Mark data processing when we have both agents and tools working
+        if (this.agentActivities.size > 0 && this.toolActivities.size > 0) {
+            if (!this.progressSteps[3].completed) {
+                this.progressSteps[3].completed = true;
+                this.progressSteps[3].timestamp = timestamp;
+                console.log('✅ Marked data processing as completed (agents + tools active)');
+            }
+        }
+
+        // Investigation completion is handled by formal status updates
+        if (this.investigation?.status === 'completed') {
+            this.progressSteps[4].completed = true;
+            this.progressSteps[4].timestamp = this.investigation.completed_at || timestamp;
+            console.log('✅ Marked investigation as completed');
         }
     }
 
@@ -425,6 +520,21 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                         this.investigation.status = event.status as InvestigationStatus;
                         this.updateProgressSteps();
                     }
+                    break;
+
+                case 'progress_update':
+                    console.log('🔄 Progress update received:', event.current_activity);
+                    // Update current activity display using BehaviorSubject
+                    if (event.current_activity) {
+                        this.currentActivitySubject.next(event.current_activity);
+                        this.updateDynamicProgressSteps(event.current_activity);
+                    }
+                    // Update formal status if provided
+                    if (this.investigation && event.formal_status) {
+                        this.investigation.status = event.formal_status as InvestigationStatus;
+                        this.updateProgressSteps();
+                    }
+                    this.cdr.markForCheck(); // Trigger change detection
                     break;
 
                 case 'completion':
@@ -645,16 +755,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return this.investigation?.status === InvestigationStatus.FAILED;
     }
 
-    // toggleAllThoughts(): void {
-    //     this.showAllThoughts = !this.showAllThoughts;
-    // }
+    // Chat message filtering
+    toggleAllThoughts(): void {
+        const currentValue = this.showAllThoughtsSubject.value;
+        this.showAllThoughtsSubject.next(!currentValue);
+    }
 
-    // shouldShowMessage(message: AgentMessage): boolean {
-    //     if (this.showAllThoughts) {
-    //         return true;
-    //     }
-    //     return message.message_type !== AgentMessageType.THINKING;
-    // }
+    shouldShowMessage(message: AgentMessage): boolean {
+        const showAllThoughts = this.showAllThoughtsSubject.value;
+        if (showAllThoughts) {
+            return true;
+        }
+        return message.message_type !== AgentMessageType.THINKING;
+    }
 
     formatTimestamp(timestamp: string): string {
         return new Date(timestamp).toLocaleString();
