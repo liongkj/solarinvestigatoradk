@@ -176,6 +176,7 @@ class SimplifiedInvestigationService:
             status=InvestigationStatus.PENDING,
             parent_id=request.parent_id,
             ui_summary=None,  # Will be populated by callback
+            plant_name=plant.plant_name if plant else "Unknown Plant",
         )
 
         # Use ADK session state for investigation metadata
@@ -189,6 +190,7 @@ class SimplifiedInvestigationService:
             "status": investigation.status.value,
             "created_at": investigation.created_at.isoformat(),
             "updated_at": investigation.updated_at.isoformat(),
+            "plant_name": investigation.plant_name,
         }
 
         # Create ADK session (this handles all storage automatically)
@@ -236,6 +238,7 @@ class SimplifiedInvestigationService:
                 ui_summary=state.get("ui_summary"),
                 result=state.get("result"),
                 error_message=state.get("error_message"),
+                plant_name=state.get("plant_name", "Unknown Plant"),
             )
 
             return investigation
@@ -1082,8 +1085,8 @@ class SimplifiedInvestigationService:
         """Send text content in smaller debounced chunks for better streaming UX"""
         try:
             # Configuration for chunking
-            CHUNK_SIZE = 30  # Send 30 characters at a time for better visual streaming
-            DELAY_MS = 80  # 80ms delay between chunks
+            CHUNK_SIZE = 20  # Send 30 characters at a time for better visual streaming
+            DELAY_MS = 10  # 80ms delay between chunks
 
             # Split new text into chunks
             chunks = []
@@ -1122,9 +1125,9 @@ class SimplifiedInvestigationService:
                 if i < len(chunks) - 1:
                     await asyncio.sleep(DELAY_MS / 1000.0)
 
-                logger.debug(
-                    f"📤 Sent chunk {i + 1}/{len(chunks)} for {investigation_id}: '{chunk[:20]}...'"
-                )
+                # logger.debug(
+                #     f"📤 Sent chunk {i + 1}/{len(chunks)} for {investigation_id}: '{chunk[:20]}...'"
+                # )
 
             logger.info(
                 f"📝 Completed debounced streaming for {investigation_id}: {len(chunks)} chunks, {len(new_text)} chars"

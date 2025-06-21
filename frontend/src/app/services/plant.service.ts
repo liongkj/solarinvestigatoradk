@@ -45,35 +45,7 @@ export class PlantService {
             })
         );
 
-        const dummyPlants: Plant[] = [
-            {
-                plant_id: '550e8400-e29b-41d4-a716-446655440001',
-                plant_name: 'Solar Farm Alpha',
-                type: 'FiT'
-            },
-            {
-                plant_id: '550e8400-e29b-41d4-a716-446655440002',
-                plant_name: 'Residential Complex Beta',
-                type: 'Zero Export'
-            },
-            {
-                plant_id: '550e8400-e29b-41d4-a716-446655440003',
-                plant_name: 'Commercial Building Gamma',
-                type: 'FiT'
-            },
-            {
-                plant_id: '550e8400-e29b-41d4-a716-446655440004',
-                plant_name: 'Industrial Plant Delta',
-                type: 'Zero Export'
-            },
-            {
-                plant_id: '550e8400-e29b-41d4-a716-446655440005',
-                plant_name: 'Rooftop Installation Epsilon',
-                type: 'FiT'
-            }
-        ];
 
-        return of(dummyPlants);
     }
 
     /**

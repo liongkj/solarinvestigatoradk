@@ -73,6 +73,7 @@ class Investigation(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     plant_id: str
+    plant_name: str  # Optional name for UI display
     start_date: date
     end_date: date
     additional_notes: Optional[str] = None
