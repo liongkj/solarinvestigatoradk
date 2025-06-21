@@ -279,10 +279,10 @@ class SimplifiedInvestigationService:
             # Create agent with after_agent_callback for UI processing
             # AND workorder agent as sub-agent
             agent = get_solar_investigation_agent(
-                output_key="investigation_result",  # ADK will auto-save to state
-                after_agent_callback=self._create_ui_summary_callback(investigation.id),
-                # TODO: Add workorder agent when implemented later
-                # workorder_agent=get_workorder_agent(),
+                # output_key="investigation_result",  # ADK will auto-save to state
+                # after_agent_callback=self._create_ui_summary_callback(investigation.id),
+                # # TODO: Add workorder agent when implemented later
+                # # workorder_agent=get_workorder_agent(),
             )  # swap to out agent
 
             # Create runner
