@@ -66,7 +66,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     public readonly showAllThoughts$ = this.showAllThoughtsSubject.asObservable();
 
     // Tab management for investigation views - using reactive streams
-    private activeTabSubject = new BehaviorSubject<'messages' | 'summary' | 'all'>('all');
+    private activeTabSubject = new BehaviorSubject<'messages' | 'summary' | 'all'>('summary');
     public readonly activeTab$ = this.activeTabSubject.asObservable();
 
     // Public observables for template consumption - use asObservable() to prevent external modification
@@ -195,7 +195,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // UI Summary support
     showUiSummaries = false;
     uiSummaryCache: Map<string, string> = new Map();
-    
+
     // Keep activeTab for template binding compatibility
     get activeTab(): 'messages' | 'summary' | 'all' {
         return this.activeTabSubject.value;
@@ -1035,10 +1035,6 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             ui_state: { is_summary: true },
             show_full_content: false
         };
-    }
-
-    setContentView(showSummaries: boolean): void {
-        this.showUiSummaries = showSummaries;
     }
 
     loadInvestigationDetailsSilently(): void {

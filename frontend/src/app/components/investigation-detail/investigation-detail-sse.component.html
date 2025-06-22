@@ -244,16 +244,6 @@
                             <!-- Tabbed Navigation -->
                             <ul class="nav nav-pills nav-sm" role="tablist">
                                 <li class="nav-item" role="presentation">
-                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('all')"
-                                        (click)="setActiveTab('all')" type="button">
-                                        <i class="fas fa-list me-1"></i>All
-                                        <span class="badge bg-light text-dark ms-1"
-                                            *ngIf="getTabMessageCount('all') > 0">
-                                            {{ getTabMessageCount('all') }}
-                                        </span>
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
                                     <button class="nav-link px-3 py-1" [class.active]="isTabActive('summary')"
                                         (click)="setActiveTab('summary')" type="button">
                                         <i class="fas fa-lightbulb me-1"></i>Summary
@@ -273,22 +263,17 @@
                                         </span>
                                     </button>
                                 </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('all')"
+                                        (click)="setActiveTab('all')" type="button">
+                                        <i class="fas fa-list me-1"></i>All
+                                        <span class="badge bg-light text-dark ms-1"
+                                            *ngIf="getTabMessageCount('all') > 0">
+                                            {{ getTabMessageCount('all') }}
+                                        </span>
+                                    </button>
+                                </li>
                             </ul>
-
-                            <!-- Content Display Toggle (keep for backwards compatibility) -->
-                            <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Content display toggle">
-                                <input type="radio" class="btn-check" name="contentView" id="fullContent"
-                                    [checked]="!showUiSummaries" (change)="setContentView(false)">
-                                <label class="btn btn-outline-secondary" for="fullContent">
-                                    <i class="fas fa-align-left me-1"></i>Full
-                                </label>
-
-                                <input type="radio" class="btn-check" name="contentView" id="summaries"
-                                    [checked]="showUiSummaries" (change)="setContentView(true)">
-                                <label class="btn btn-outline-secondary" for="summaries">
-                                    <i class="fas fa-compress-alt me-1"></i>Brief
-                                </label>
-                            </div>
                         </div>
                         <div class="card-body chat-container">
 
