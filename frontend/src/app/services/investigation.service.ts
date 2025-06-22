@@ -2,6 +2,7 @@ import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpParams, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, Subject, BehaviorSubject } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 import {
     Investigation,
     InvestigationRequest,
@@ -50,7 +51,7 @@ export interface SSEEvent {
     providedIn: 'root'
 })
 export class InvestigationService {
-    private readonly baseUrl = 'http://localhost:8000/api/investigations/';
+    private readonly baseUrl = `${environment.apiUrl}/investigations/`;
 
     // SSE event streams by investigation ID
     private sseStreams: Map<string, EventSource> = new Map();

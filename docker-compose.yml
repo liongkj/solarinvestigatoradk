@@ -60,10 +60,15 @@ services:
     container_name: solar_frontend
     ports:
       - "4200:4200"
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - API_URL=http://backend:8000/api
     volumes:
       - ./frontend:/app
       - /app/node_modules
     command: npm start -- --host 0.0.0.0 --port 4200
+    depends_on:
+      - backend
 
   # Legacy LangGraph services (keep for reference)
   # langgraph-postgres:
