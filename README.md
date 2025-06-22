@@ -29,8 +29,7 @@ SolarWarden is a data-driven copilot for solar farm operators — pinpointing lo
 
 ### 📊 Tech Stack Diagram
 
-![Tech Stack Diagram](./assets/tech_stack.png)
-
+<img src="./assets/tech_stack.png" alt="Tech Stack Diagram" height=625 width="400" />
 ---
 
 ## 🏗️ Google ADK Architecture
