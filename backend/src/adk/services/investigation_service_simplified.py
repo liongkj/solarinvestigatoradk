@@ -198,6 +198,12 @@ class SimplifiedInvestigationService:
             "inverter_device_id_and_capacity_peak": None,
             "date_requested": None,
             "date_today": None,
+            "alarm_agent_output": None,
+            "detailed_inverter_performance_agent_output": None,
+            "detailed_plant_timeseries_agent_output": None,
+            "daily_pr_agent_output": None,
+            "problematic_detailed_inverter_performance": [],
+            "problematic_five_minutes_pr": [],
         }
         # TODO: TO be retrieved using context.state later
 
@@ -481,7 +487,7 @@ class SimplifiedInvestigationService:
 
             # Check for workorder agent request
             if "@workorder-agent" in content.lower():
-                await self._handle_workorder_request(investigation_id, content)
+                await self._handle_workorder_request(investigation.id, content)
 
         except Exception as e:
             logger.error(f"Error handling sub-agent request: {e}")

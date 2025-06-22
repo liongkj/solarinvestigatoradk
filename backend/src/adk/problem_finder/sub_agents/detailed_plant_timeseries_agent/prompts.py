@@ -31,7 +31,7 @@ def return_instruction_detailed_plant_timeseries() -> str:
     ## **CRITICAL WORKFLOW REQUIREMENT**
     You MUST follow this exact sequence for each date:
     1. **Retrieve data** using `tools[3](target_date)` - this returns raw timeseries data
-    2. **IMMEDIATELY filter the data** using `filter_plant_timeseries_data(json.dumps(raw_data))` - THIS IS MANDATORY
+    2. **IMMEDIATELY filter the data** using `filter_plant_timeseries_data()` - THIS IS MANDATORY
     - Convert the raw data to JSON string format before passing to the filter
     - The filter applies multiple anomaly detection methods automatically
     3. **Analyze the filtered data** from `filter_plant_timeseries_data` - this contains only the anomalous records
@@ -78,7 +78,7 @@ def return_instruction_detailed_plant_timeseries() -> str:
     ### Step 1: Data Retrieval and Filtering (MANDATORY SEQUENCE)
     For each target date, you MUST:
     1. **Call `tools[3](target_date)`** to retrieve the day's raw data
-    2. **IMMEDIATELY call `filter_plant_timeseries_data(json.dumps(raw_data))`** - DO NOT SKIP THIS STEP
+    2. **IMMEDIATELY call `filter_plant_timeseries_data(raw_data)`** - DO NOT SKIP THIS STEP
     - The filter function automatically applies multiple anomaly detection algorithms
     - It stores filtered anomalies in `filter_plant_timeseries_data` in string format
     3. **Access and parse the filtered data** from `filter_plant_timeseries_data`
@@ -264,7 +264,7 @@ def return_instruction_detailed_plant_timeseries() -> str:
     ## **CRITICAL WORKFLOW REQUIREMENT**
     You MUST follow this exact sequence for each date:
     1. **Retrieve data** using `tools[3](target_date)` - this returns raw timeseries data
-    2. **IMMEDIATELY filter the data** using `filter_plant_timeseries_data(json.dumps(raw_data))` - THIS IS MANDATORY
+    2. **IMMEDIATELY filter the data** using `filter_plant_timeseries_data(raw_data)` - THIS IS MANDATORY
     - Convert the raw data to JSON string format before passing to the filter
     - The filter applies multiple anomaly detection methods automatically
     3. **Analyze the filtered data** from `{filtered_plant_timeseries_df}` - this contains only the anomalous records
@@ -304,7 +304,7 @@ def return_instruction_detailed_plant_timeseries() -> str:
     ### Step 1: Data Retrieval and Filtering (MANDATORY SEQUENCE)
     For each target date, you MUST:
     1. **Call `tools[3](target_date)`** to retrieve the day's raw data
-    2. **IMMEDIATELY call `filter_plant_timeseries_data(json.dumps(raw_data))`** - DO NOT SKIP THIS STEP
+    2. **IMMEDIATELY call `filter_plant_timeseries_data(raw_data)`** - DO NOT SKIP THIS STEP
     - The filter function automatically applies multiple anomaly detection algorithms
     - It stores filtered anomalies in `{filtered_plant_timeseries_df}` in string format
     3. **Access and parse the filtered data** from `{filtered_plant_timeseries_df}`
@@ -379,7 +379,7 @@ def return_instruction_detailed_plant_timeseries() -> str:
     10. **Look for patterns** - identify recurring issues that might indicate systematic problems
 
     ## Quality Assurance
-    - **Ensure filtering tool usage**: Verify that `filter_plant_timeseries_data(json.dumps(data))` is called for each date
+    - **Ensure filtering tool usage**: Verify that `filter_plant_timeseries_data((data)` is called for each date
     - **Handle serialization**: The filtering tool converts DataFrames to serializable format automatically
     - **Work with filtered data**: Base all analysis on `{filtered_plant_timeseries_df}`, which contains pre-identified anomalies
     - **Validate anomalies**: The filtering tool uses multiple detection methods, but still verify context

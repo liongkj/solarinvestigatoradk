@@ -144,9 +144,9 @@ root_agent = SequentialAgent(
     name="problem_finder",
     sub_agents=[
         planner_agent,
-        # daily_pr_agent,
-        # parallel_pipeline,
-        # aggregator_agent,
+        daily_pr_agent,
+        parallel_pipeline,
+        aggregator_agent,
     ],
     # before_agent_callback=setup,
 )
