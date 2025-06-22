@@ -72,20 +72,82 @@
                     <!-- Investigation Summary Card -->
                     <div class="card mb-4 investigation-summary-card"
                         *ngIf="hasInvestigationSummary() && showUiSummaries">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-light">
-                            <h5 class="card-title mb-0 text-dark">
-                                <i class="fas fa-lightbulb me-2 text-warning"></i>
-                                Investigation Summary
-                            </h5>
-                            <span class="badge ai-generated-badge">
-                                <i class="fas fa-robot"></i> AI Generated
-                            </span>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="investigation-summary-text mb-0">
-                                {{ getInvestigationSummary() }}
+                        <ng-container *ngIf="getParsedInvestigationSummary() as parsedSummary; else rawSummary">
+                            <!-- Structured Summary Display -->
+                            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                <div class="d-flex align-items-center">
+                                    <i [class]="getActionTypeIcon(parsedSummary.actionType)"
+                                        [class]="getActionTypeColor(parsedSummary.actionType) + ' me-2'"></i>
+                                    <div>
+                                        <h6 class="card-title mb-0 text-dark">{{ parsedSummary.mainTheme }}</h6>
+                                        <small class="text-muted">{{ parsedSummary.actionType | titlecase }}</small>
+                                    </div>
+                                </div>
+                                <span class="badge ai-generated-badge">
+                                    <i class="fas fa-robot"></i> AI Generated
+                                </span>
                             </div>
-                        </div>
+                            <div class="card-body">
+                                <!-- Action Summary Section -->
+                                <div class="action-summary mb-3">
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-check-circle text-success me-1"></i>
+                                        What Was Done
+                                    </h6>
+                                    <p class="mb-3">{{ parsedSummary.actionTaken }}</p>
+
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-info-circle text-primary me-1"></i>
+                                        Key Description
+                                    </h6>
+                                    <p class="mb-3">{{ parsedSummary.description }}</p>
+                                </div>
+
+                                <!-- Key Findings Cards -->
+                                <div class="key-findings mb-3" *ngIf="parsedSummary.keyEvents?.length">
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-list-ul text-info me-1"></i>
+                                        Key Events
+                                    </h6>
+                                    <div class="row g-2">
+                                        <div class="col-12" *ngFor="let event of parsedSummary.keyEvents">
+                                            <div class="finding-card p-2 bg-light rounded d-flex align-items-center">
+                                                <i class="fas fa-check-circle text-success me-2"></i>
+                                                <span class="small">{{ event }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Next Steps Section -->
+                                <div
+                                    *ngIf="parsedSummary.nextSteps && parsedSummary.nextSteps !== 'No specific next steps provided'">
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-arrow-right text-warning me-1"></i>
+                                        Recommended Next Steps
+                                    </h6>
+                                    <p class="mb-0">{{ parsedSummary.nextSteps }}</p>
+                                </div>
+                            </div>
+                        </ng-container>
+
+                        <!-- Fallback: Raw Summary Display -->
+                        <ng-template #rawSummary>
+                            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                <h5 class="card-title mb-0 text-dark">
+                                    <i class="fas fa-lightbulb me-2 text-warning"></i>
+                                    Investigation Summary
+                                </h5>
+                                <span class="badge ai-generated-badge">
+                                    <i class="fas fa-robot"></i> AI Generated
+                                </span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="investigation-summary-text mb-0">
+                                    {{ getInvestigationSummary() }}
+                                </div>
+                            </div>
+                        </ng-template>
                     </div>
 
                     <!-- Investigation Summary Placeholder (when summary mode is on but no summary available) -->
@@ -284,9 +346,67 @@
                                         </div>
                                         <div
                                             class="summary-content p-3 bg-light rounded border-start border-warning border-3">
-                                            <div style="white-space: pre-wrap; line-height: 1.6; font-size: 1.05rem;">
-                                                {{ message.content }}
-                                            </div>
+                                            <ng-container
+                                                *ngIf="parseUiSummary(message.content) as parsedSummary; else rawMessageSummary">
+                                                <!-- Structured Summary Display for Chat Message -->
+                                                <div class="structured-summary">
+                                                    <!-- Action Summary Section -->
+                                                    <div class="action-summary mb-3">
+                                                        <h6 class="mb-2 d-flex align-items-center">
+                                                            <i [class]="getActionTypeIcon(parsedSummary.actionType)"
+                                                                [class]="getActionTypeColor(parsedSummary.actionType) + ' me-2'"></i>
+                                                            {{ parsedSummary.mainTheme }}
+                                                            <span class="badge ms-2"
+                                                                [class]="'bg-' + parsedSummary.actionType">
+                                                                {{ parsedSummary.actionType | titlecase }}
+                                                            </span>
+                                                        </h6>
+                                                        <p class="mb-2"><strong>Action:</strong> {{
+                                                            parsedSummary.actionTaken }}</p>
+                                                        <p class="mb-3">{{ parsedSummary.description }}</p>
+                                                    </div>
+
+                                                    <!-- Key Events Cards -->
+                                                    <div class="key-findings mb-3"
+                                                        *ngIf="parsedSummary.keyEvents?.length">
+                                                        <h6 class="mb-2">
+                                                            <i class="fas fa-list-check text-success me-1"></i>
+                                                            Key Events
+                                                        </h6>
+                                                        <div class="row g-2">
+                                                            <div class="col-md-6"
+                                                                *ngFor="let event of parsedSummary.keyEvents">
+                                                                <div
+                                                                    class="event-card p-2 bg-white rounded border d-flex align-items-center">
+                                                                    <i
+                                                                        class="fas fa-check-circle text-success me-2"></i>
+                                                                    <span class="small">{{ event }}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Next Steps Section -->
+                                                    <div *ngIf="parsedSummary.nextSteps && parsedSummary.nextSteps !== 'No specific next steps provided'"
+                                                        class="next-steps">
+                                                        <h6 class="mb-2">
+                                                            <i class="fas fa-arrow-circle-right text-primary me-1"></i>
+                                                            Recommended Next Steps
+                                                        </h6>
+                                                        <div class="p-2 bg-primary bg-opacity-10 rounded">
+                                                            <p class="mb-0">{{ parsedSummary.nextSteps }}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </ng-container>
+
+                                            <!-- Fallback: Raw Content Display -->
+                                            <ng-template #rawMessageSummary>
+                                                <div
+                                                    style="white-space: pre-wrap; line-height: 1.6; font-size: 1.05rem;">
+                                                    {{ message.content }}
+                                                </div>
+                                            </ng-template>
                                         </div>
                                     </div>
 
@@ -325,9 +445,64 @@
                                                     }}</small>
                                             </div>
                                             <!-- Message Content -->
-                                            <div class="message-content"
-                                                style="white-space: pre-wrap; line-height: 1.5;">
-                                                {{ getDisplayContent(message) }}
+                                            <div class="message-content">
+                                                <!-- Structured Summary for Agent Messages -->
+                                                <ng-container *ngIf="hasStructuredMessageSummary(message)">
+                                                    <ng-container
+                                                        *ngIf="getParsedMessageSummary(message) as parsedSummary">
+                                                        <div class="compact-structured-summary p-3 bg-light rounded">
+                                                            <!-- Compact Header -->
+                                                            <div class="d-flex align-items-center mb-2">
+                                                                <i [class]="getActionTypeIcon(parsedSummary.actionType)"
+                                                                    [class]="getActionTypeColor(parsedSummary.actionType) + ' me-2'"></i>
+                                                                <strong>{{ parsedSummary.mainTheme }}</strong>
+                                                                <span class="badge ms-2 badge-sm"
+                                                                    [class]="'bg-' + parsedSummary.actionType">
+                                                                    {{ parsedSummary.actionType | titlecase }}
+                                                                </span>
+                                                            </div>
+
+                                                            <!-- Action Description -->
+                                                            <p class="mb-2">{{ parsedSummary.description }}</p>
+
+                                                            <!-- Key Events (compact) -->
+                                                            <div *ngIf="parsedSummary.keyEvents?.length"
+                                                                class="key-events mb-2">
+                                                                <div class="d-flex flex-wrap gap-1">
+                                                                    <span *ngFor="let event of parsedSummary.keyEvents"
+                                                                        class="badge bg-secondary text-wrap">
+                                                                        {{ event }}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Toggle to show full content -->
+                                                            <button class="btn btn-sm btn-outline-secondary"
+                                                                (click)="message.show_full_content = !message.show_full_content">
+                                                                <i class="fas"
+                                                                    [class.fa-expand]="!message.show_full_content"
+                                                                    [class.fa-compress]="message.show_full_content"></i>
+                                                                {{ message.show_full_content ? 'Show Summary' : 'Show
+                                                                Full Response' }}
+                                                            </button>
+
+                                                            <!-- Full content when expanded -->
+                                                            <div *ngIf="message.show_full_content"
+                                                                class="full-content mt-3 p-2 bg-white rounded border">
+                                                                <div
+                                                                    style="white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">
+                                                                    {{ message.content }}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </ng-container>
+                                                </ng-container>
+
+                                                <!-- Regular Content Display -->
+                                                <div *ngIf="!hasStructuredMessageSummary(message)"
+                                                    style="white-space: pre-wrap; line-height: 1.5;">
+                                                    {{ getDisplayContent(message) }}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

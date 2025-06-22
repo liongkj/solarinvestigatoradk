@@ -26,6 +26,16 @@ interface ProgressStep {
     timestamp: string | null;
 }
 
+// Interface for parsed structured summary
+interface ParsedSummary {
+    mainTheme: string;
+    actionTaken: string;
+    actionType: string;
+    description: string;
+    nextSteps?: string;
+    keyEvents: string[];
+}
+
 @Component({
     selector: 'app-investigation-detail',
     standalone: true,
@@ -55,6 +65,10 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     private showAllThoughtsSubject = new BehaviorSubject<boolean>(false);
     public readonly showAllThoughts$ = this.showAllThoughtsSubject.asObservable();
 
+    // Tab management for investigation views - using reactive streams
+    private activeTabSubject = new BehaviorSubject<'messages' | 'summary' | 'all'>('all');
+    public readonly activeTab$ = this.activeTabSubject.asObservable();
+
     // Public observables for template consumption - use asObservable() to prevent external modification
     public readonly realTimeEvents$ = this.realTimeEventsSubject.asObservable().pipe(
         tap(events => console.log('realTimeEvents$ emitting:', events.length, 'events')),
@@ -83,16 +97,17 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // Computed observables
     public readonly visibleMessages$ = combineLatest([
         this.chatMessages$,
-        this.showAllThoughts$
+        this.showAllThoughts$,
+        this.activeTab$
     ]).pipe(
-        map(([messages, showAllThoughts]: [AgentMessage[], boolean]) => {
-            console.log('Computing visibleMessages, total messages:', messages.length, 'showAllThoughts:', showAllThoughts);
+        map(([messages, showAllThoughts, activeTab]: [AgentMessage[], boolean, 'messages' | 'summary' | 'all']) => {
+            console.log('Computing visibleMessages, total messages:', messages.length, 'showAllThoughts:', showAllThoughts, 'activeTab:', activeTab);
 
             // Add investigation summary message if available and we're in the right tab
             let allMessages = [...messages];
 
             // Add investigation summary as first message if available
-            if (this.activeTab === 'all' || this.activeTab === 'summary') {
+            if (activeTab === 'all' || activeTab === 'summary') {
                 const summaryMessage = this.createInvestigationSummaryMessage();
                 if (summaryMessage) {
                     allMessages = [summaryMessage, ...allMessages];
@@ -102,10 +117,10 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             // Filter messages based on showAllThoughts setting and active tab
             const filtered = allMessages.filter((msg: AgentMessage) => {
                 // Tab filtering
-                if (this.activeTab === 'summary' && !msg.metadata?.['is_investigation_summary']) {
+                if (activeTab === 'summary' && !msg.metadata?.['is_investigation_summary']) {
                     return false;
                 }
-                if (this.activeTab === 'messages' && msg.metadata?.['is_investigation_summary']) {
+                if (activeTab === 'messages' && msg.metadata?.['is_investigation_summary']) {
                     return false;
                 }
 
@@ -143,7 +158,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 return seqA - seqB; // Ascending order (earliest sequence first)
             });
 
-            console.log('Filtered and sorted messages by backend timestamp:', sorted.length);
+            console.log('Filtered and sorted messages by backend timestamp for tab:', activeTab, '- count:', sorted.length);
             return sorted;
         }),
         tap((visible: AgentMessage[]) => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
@@ -180,9 +195,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // UI Summary support
     showUiSummaries = false;
     uiSummaryCache: Map<string, string> = new Map();
-
-    // Tab management for investigation views
-    activeTab: 'messages' | 'summary' | 'all' = 'all';
+    
+    // Keep activeTab for template binding compatibility
+    get activeTab(): 'messages' | 'summary' | 'all' {
+        return this.activeTabSubject.value;
+    }
 
     // Streaming text support
     currentStreamingText = '';
@@ -821,6 +838,30 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return new Date(timestamp).toLocaleString();
     }
 
+    // Tab management methods
+    isTabActive(tab: 'messages' | 'summary' | 'all'): boolean {
+        return this.activeTab === tab;
+    }
+
+    setActiveTab(tab: 'messages' | 'summary' | 'all'): void {
+        this.activeTabSubject.next(tab);
+    }
+
+    getTabMessageCount(tab: 'messages' | 'summary' | 'all'): number {
+        const messages = this.chatMessagesSubject.value;
+
+        switch (tab) {
+            case 'all':
+                return messages.length;
+            case 'summary':
+                return messages.filter(msg => msg.metadata?.['is_investigation_summary']).length;
+            case 'messages':
+                return messages.filter(msg => !msg.metadata?.['is_investigation_summary']).length;
+            default:
+                return 0;
+        }
+    }
+
     // Debug methods to help track UI updates
     getCurrentTime(): string {
         return new Date().toLocaleTimeString();
@@ -899,10 +940,6 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return message.content;
     }
 
-    hasUiSummary(message: AgentMessage): boolean {
-        return !!(message.metadata?.['ui_summary']);
-    }
-
     // Investigation summary helpers
     hasInvestigationSummary(): boolean {
         return !!(this.investigation?.ui_summary);
@@ -918,31 +955,65 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return this.investigation?.ui_summary || null;
     }
 
-    // Tab management methods
-    setActiveTab(tab: 'messages' | 'summary' | 'all'): void {
-        this.activeTab = tab;
-        // Trigger recomputation of visible messages
-        this.chatMessagesSubject.next(this.chatMessagesSubject.value);
+    // Get parsed investigation summary
+    getParsedInvestigationSummary(): ParsedSummary | null {
+        const summary = this.getInvestigationSummary();
+        return summary ? this.parseUiSummary(summary) : null;
     }
 
-    isTabActive(tab: 'messages' | 'summary' | 'all'): boolean {
-        return this.activeTab === tab;
-    }
-
-    // Get message count for each tab (for display in tab badges)
-    getTabMessageCount(tab: 'messages' | 'summary' | 'all'): number {
-        const allMessages = this.chatMessagesSubject.value;
-
-        switch (tab) {
-            case 'summary':
-                return this.hasInvestigationSummary() ? 1 : 0;
-            case 'messages':
-                return allMessages.length;
-            case 'all':
-                return allMessages.length + (this.hasInvestigationSummary() ? 1 : 0);
-            default:
-                return 0;
+    // Parse structured summary from JSON string
+    parseUiSummary(uiSummary: string): ParsedSummary | null {
+        try {
+            const parsed = JSON.parse(uiSummary);
+            return {
+                mainTheme: parsed.main_theme || 'Investigation Analysis',
+                actionTaken: parsed.action_taken || 'Analysis completed',
+                actionType: parsed.action_type || 'analysis',
+                description: parsed.description_first_party || parsed.description || 'Processing completed',
+                nextSteps: parsed.next_steps,
+                keyEvents: parsed.description_events || []
+            };
+        } catch (error) {
+            console.warn('Failed to parse UI summary:', error);
+            return null;
         }
+    }
+
+    // Get action type icon
+    getActionTypeIcon(actionType: string): string {
+        const iconMap: { [key: string]: string } = {
+            'analysis': 'fas fa-chart-line',
+            'investigation': 'fas fa-search',
+            'data_processing': 'fas fa-database',
+            'reporting': 'fas fa-file-alt',
+            'monitoring': 'fas fa-eye',
+            'diagnosis': 'fas fa-stethoscope',
+            'optimization': 'fas fa-cogs',
+            'maintenance': 'fas fa-tools',
+            'planning': 'fas fa-calendar-alt'
+        };
+        return iconMap[actionType] || 'fas fa-info-circle';
+    }
+
+    // Get action type color class
+    getActionTypeColor(actionType: string): string {
+        const colorMap: { [key: string]: string } = {
+            'analysis': 'text-primary',
+            'investigation': 'text-warning',
+            'data_processing': 'text-info',
+            'reporting': 'text-success',
+            'monitoring': 'text-secondary',
+            'diagnosis': 'text-danger',
+            'optimization': 'text-purple',
+            'maintenance': 'text-dark',
+            'planning': 'text-indigo'
+        };
+        return colorMap[actionType] || 'text-muted';
+    }
+
+    // Check if message has structured summary
+    hasStructuredSummary(message: AgentMessage): boolean {
+        return !!(message.metadata?.['ui_summary'] && this.showUiSummaries);
     }
 
     // Create investigation summary message for chat history
@@ -1068,5 +1139,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         } catch (err) {
             console.log('Error scrolling to bottom:', err);
         }
+    }
+
+    // Get parsed UI summary for agent messages
+    getParsedMessageSummary(message: AgentMessage): ParsedSummary | null {
+        const summary = message.metadata?.['ui_summary'];
+        return summary ? this.parseUiSummary(summary) : null;
+    }
+
+    // Check if agent message has structured summary
+    hasStructuredMessageSummary(message: AgentMessage): boolean {
+        return this.showUiSummaries &&
+            message.message_type === 'agent' &&
+            !!(message.metadata?.['ui_summary']) &&
+            !!this.getParsedMessageSummary(message);
     }
 }
