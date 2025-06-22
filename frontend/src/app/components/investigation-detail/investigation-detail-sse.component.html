@@ -69,6 +69,41 @@
                         </div>
                     </div>
 
+                    <!-- Investigation Summary Card -->
+                    <div class="card mb-4 investigation-summary-card"
+                        *ngIf="hasInvestigationSummary() && showUiSummaries">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                            <h5 class="card-title mb-0 text-dark">
+                                <i class="fas fa-lightbulb me-2 text-warning"></i>
+                                Investigation Summary
+                            </h5>
+                            <span class="badge ai-generated-badge">
+                                <i class="fas fa-robot"></i> AI Generated
+                            </span>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="investigation-summary-text mb-0">
+                                {{ getInvestigationSummary() }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Investigation Summary Placeholder (when summary mode is on but no summary available) -->
+                    <div class="card mb-4 border-warning" *ngIf="shouldShowInvestigationSummaryPlaceholder()">
+                        <div class="card-header bg-warning bg-opacity-10">
+                            <h5 class="card-title mb-0 text-warning">
+                                <i class="fas fa-cog fa-spin me-2"></i>
+                                Generating Investigation Summary...
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-muted text-center py-3">
+                                <i class="fas fa-robot fa-2x mb-2 text-warning"></i>
+                                <p class="mb-0">AI is analyzing the investigation and will generate a summary soon.</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Progress Card -->
                     <div class="card mb-4">
                         <div class="card-header">
@@ -143,17 +178,53 @@
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="card-title mb-0">Investigation Progress</h5>
-                            <div class="btn-group btn-group-sm" role="group" aria-label="Content display toggle">
+
+                            <!-- Tabbed Navigation -->
+                            <ul class="nav nav-pills nav-sm" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('all')"
+                                        (click)="setActiveTab('all')" type="button">
+                                        <i class="fas fa-list me-1"></i>All
+                                        <span class="badge bg-light text-dark ms-1"
+                                            *ngIf="getTabMessageCount('all') > 0">
+                                            {{ getTabMessageCount('all') }}
+                                        </span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('summary')"
+                                        (click)="setActiveTab('summary')" type="button">
+                                        <i class="fas fa-lightbulb me-1"></i>Summary
+                                        <span class="badge bg-light text-dark ms-1"
+                                            *ngIf="getTabMessageCount('summary') > 0">
+                                            {{ getTabMessageCount('summary') }}
+                                        </span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('messages')"
+                                        (click)="setActiveTab('messages')" type="button">
+                                        <i class="fas fa-comments me-1"></i>Messages
+                                        <span class="badge bg-light text-dark ms-1"
+                                            *ngIf="getTabMessageCount('messages') > 0">
+                                            {{ getTabMessageCount('messages') }}
+                                        </span>
+                                    </button>
+                                </li>
+                            </ul>
+
+                            <!-- Content Display Toggle (keep for backwards compatibility) -->
+                            <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Content display toggle">
                                 <input type="radio" class="btn-check" name="contentView" id="fullContent"
                                     [checked]="!showUiSummaries" (change)="setContentView(false)">
-                                <label class="btn btn-outline-primary" for="fullContent">
-                                    <i class="fas fa-align-left me-1"></i>Full Content
+                                <label class="btn btn-outline-secondary" for="fullContent">
+                                    <i class="fas fa-align-left me-1"></i>Full
                                 </label>
 
                                 <input type="radio" class="btn-check" name="contentView" id="summaries"
                                     [checked]="showUiSummaries" (change)="setContentView(true)">
-                                <label class="btn btn-outline-primary" for="summaries">
-                                    <i class="fas fa-list-ul me-1"></i>Summaries
+                                <label class="btn btn-outline-secondary" for="summaries">
+                                    <i class="fas fa-compress-alt me-1"></i>Brief
                                 </label>
                             </div>
                         </div>
@@ -164,19 +235,64 @@
 
                                 <div *ngIf="(visibleMessages$ | async)?.length === 0"
                                     class="text-center text-muted py-5">
-                                    <i class="fas fa-comments fa-3x mb-3"></i>
-                                    <p>No messages yet. The investigation will start soon...</p>
+                                    <div *ngIf="activeTab === 'summary'">
+                                        <i class="fas fa-lightbulb fa-3x mb-3 text-warning"></i>
+                                        <h5>No Investigation Summary Yet</h5>
+                                        <p>The AI will generate a summary once the investigation progresses.</p>
+                                    </div>
+                                    <div *ngIf="activeTab === 'messages'">
+                                        <i class="fas fa-comments fa-3x mb-3"></i>
+                                        <h5>No Messages Yet</h5>
+                                        <p>Investigation messages will appear here as the agent works.</p>
+                                    </div>
+                                    <div *ngIf="activeTab === 'all'">
+                                        <i class="fas fa-search fa-3x mb-3"></i>
+                                        <h5>Investigation Starting</h5>
+                                        <p>The investigation will begin soon. Summary and messages will appear here.</p>
+                                    </div>
                                 </div>
 
                                 <!-- Regular chat messages first (in chronological order) -->
                                 <div *ngFor="let message of visibleMessages$ | async" class="message-card alert mb-2"
                                     [class.alert-primary]="message.message_type === 'user'"
                                     [class.alert-success]="message.message_type === 'agent'"
-                                    [class.alert-secondary]="message.message_type === 'system'"
+                                    [class.alert-secondary]="message.message_type === 'system' && !message.metadata?.['is_investigation_summary']"
                                     [class.alert-warning]="message.message_type === 'thinking'"
-                                    [class.alert-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'">
+                                    [class.alert-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'"
+                                    [class.alert-light]="message.metadata?.['is_investigation_summary']"
+                                    [class.border-warning]="message.metadata?.['is_investigation_summary']"
+                                    [class.border-3]="message.metadata?.['is_investigation_summary']">
 
-                                    <div class="d-flex align-items-start">
+                                    <!-- Special handling for Investigation Summary -->
+                                    <div *ngIf="message.metadata?.['is_investigation_summary']"
+                                        class="investigation-summary-message">
+                                        <div class="d-flex align-items-center mb-3">
+                                            <div class="me-3">
+                                                <i class="fas fa-lightbulb fa-2x text-warning"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <h5 class="mb-1 text-warning">
+                                                    <i class="fas fa-robot me-2"></i>
+                                                    Investigation Summary
+                                                </h5>
+                                                <small class="text-muted">AI-generated overview • {{
+                                                    formatTimestamp(message.timestamp) }}</small>
+                                            </div>
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="fas fa-star"></i> Key Insights
+                                            </span>
+                                        </div>
+                                        <div
+                                            class="summary-content p-3 bg-light rounded border-start border-warning border-3">
+                                            <div style="white-space: pre-wrap; line-height: 1.6; font-size: 1.05rem;">
+                                                {{ message.content }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Regular message handling -->
+                                    <div *ngIf="!message.metadata?.['is_investigation_summary']"
+                                        class="d-flex align-items-start">
                                         <!-- Message Type Icon -->
                                         <div class="me-2">
                                             <i class="fas fa-lg" [class.fa-user]="message.message_type === 'user'"
@@ -207,7 +323,8 @@
                                                 </h6>
                                                 <small class="text-muted">{{ formatTimestamp(message.timestamp)
                                                     }}</small>
-                                            </div> <!-- Message Content -->
+                                            </div>
+                                            <!-- Message Content -->
                                             <div class="message-content"
                                                 style="white-space: pre-wrap; line-height: 1.5;">
                                                 {{ getDisplayContent(message) }}
@@ -215,64 +332,64 @@
                                         </div>
                                     </div>
                                 </div>
-
-                                <!-- Streaming Message (ChatGPT style) - Shows AFTER existing messages -->
-                                <div *ngIf="(isStreaming$ | async) && (streamingText$ | async)"
-                                    class="message-card alert alert-success mb-2">
-                                    <div class="d-flex align-items-start">
-                                        <!-- Agent Icon -->
-                                        <div class="me-2">
-                                            <i class="fas fa-robot fa-lg text-success"></i>
-                                        </div>
-
-                                        <div class="flex-grow-1">
-                                            <!-- Message Header -->
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <h6 class="mb-0">
-                                                    <span class="badge bg-success me-2">Agent</span>
-                                                </h6>
-                                                <small class="text-muted">{{ streamingStartTimestamp ?
-                                                    formatTimestamp(streamingStartTimestamp) : 'responding...'
-                                                    }}</small>
-                                            </div>
-
-                                            <!-- Streaming Content -->
-                                            <div class="message-content"
-                                                style="white-space: pre-wrap; line-height: 1.5;">
-                                                {{ streamingText$ | async }}
-                                                <!-- <span class="typing-cursor">|</span> -->
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
 
-                            <!-- Chat Input Box -->
-                            <div class="card-footer border-top bg-light p-3">
-                                <div class="d-flex gap-2">
+                            <!-- Streaming Message (ChatGPT style) - Shows AFTER existing messages -->
+                            <div *ngIf="(isStreaming$ | async) && (streamingText$ | async)"
+                                class="message-card alert alert-success mb-2">
+                                <div class="d-flex align-items-start">
+                                    <!-- Agent Icon -->
+                                    <div class="me-2">
+                                        <i class="fas fa-robot fa-lg text-success"></i>
+                                    </div>
+
                                     <div class="flex-grow-1">
-                                        <div class="input-group">
-                                            <input type="text" class="form-control"
-                                                placeholder="Ask a question about this investigation..."
-                                                [(ngModel)]="chatInput" (keyup.enter)="sendChatMessage()"
-                                                [disabled]="isSendingMessage">
-                                            <button class="btn btn-primary" type="button" (click)="sendChatMessage()"
-                                                [disabled]="!chatInput.trim() || isSendingMessage">
-                                                <i class="fas fa-paper-plane" *ngIf="!isSendingMessage"></i>
-                                                <div class="spinner-border spinner-border-sm" role="status"
-                                                    *ngIf="isSendingMessage">
-                                                    <span class="visually-hidden">Sending...</span>
-                                                </div>
-                                            </button>
+                                        <!-- Message Header -->
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <span class="badge bg-success me-2">Agent</span>
+                                            </h6>
+                                            <small class="text-muted">{{ streamingStartTimestamp ?
+                                                formatTimestamp(streamingStartTimestamp) : 'responding...'
+                                                }}</small>
+                                        </div>
+
+                                        <!-- Streaming Content -->
+                                        <div class="message-content" style="white-space: pre-wrap; line-height: 1.5;">
+                                            {{ streamingText$ | async }}
+                                            <!-- <span class="typing-cursor">|</span> -->
                                         </div>
                                     </div>
                                 </div>
-                                <small class="text-muted mt-1 d-block">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    Ask questions about the investigation findings, request clarifications, or get
-                                    additional analysis.
-                                </small>
                             </div>
+                        </div>
+
+                        <!-- Chat Input Box -->
+                        <div class="card-footer border-top bg-light p-3">
+                            <div class="d-flex gap-2">
+                                <div class="flex-grow-1">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control"
+                                            placeholder="Ask a question about this investigation..."
+                                            [(ngModel)]="chatInput" (keyup.enter)="sendChatMessage()"
+                                            [disabled]="isSendingMessage">
+                                        <button class="btn btn-primary" type="button" (click)="sendChatMessage()"
+                                            [disabled]="!chatInput.trim() || isSendingMessage">
+                                            <i class="fas fa-paper-plane" *ngIf="!isSendingMessage"></i>
+                                            <div class="spinner-border spinner-border-sm" role="status"
+                                                *ngIf="isSendingMessage">
+                                                <span class="visually-hidden">Sending...</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <small class="text-muted mt-1 d-block">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Ask questions about the investigation findings, request clarifications, or get
+                                additional analysis.
+                            </small>
                         </div>
                     </div>
                 </div>
+            </div>

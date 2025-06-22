@@ -13,6 +13,7 @@ from google.adk.events import Event, EventActions
 from datetime import datetime
 
 from google.adk.sessions import DatabaseSessionService
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +51,35 @@ When given an agent's output, you must respond with a JSON object that matches t
 {
   "main_theme": "string - The main theme or primary focus of the agent's actions",
   "action_taken": "string - The specific action that was performed by the agent", 
-  "action_type": "string - One of: analysis, investigation, data_processing, reporting, monitoring, diagnosis, optimization, maintenance",
-  "description_first_party": "A brief description of what the agent accomplished, limited to 300 characters, this needs to be concise and informative. i.e. I have analyzed the solar system performance data and identified issues with 2 inverters. The investigation revealed potential shading problems and equipment malfunction that require immediate attention."
-  "next_steps": "string - Optional next steps or recommendations based on the agent's actions, if applicable"
-  "description_events": "list[string]-Similar to description_first_party, but this is a shorter description that is used for events. This should be limited to 50 characters and should be concise and informative. i.e. ['Analyzed solar system performance data', 'Identified issues with 2 inverters', 'Revealed potential shading problems']"
+  "action_type": "string - One of: analysis, investigation, data_processing, reporting, monitoring, diagnosis, optimization, maintenance, planning",
+  "description_first_party": "string - A brief description of what the agent accomplished, STRICTLY limited to 300 characters maximum. Be concise and informative, focusing on key outcomes and findings.",
+  "next_steps": "string - Optional next steps or recommendations based on the agent's actions, if applicable",
+  "description_events": "array of strings - Each item STRICTLY limited to 50 characters maximum. Should be concise, specific, and capture key actions or findings. Include relevant context like system names, dates, or specific issues when possible."
 }
 
 Action type categories:
-- analysis: When analyzing data, patterns, or performance metrics
-- investigation: When investigating issues, problems, or anomalies  
-- data_processing: When processing, transforming, or organizing data
-- reporting: When generating reports, summaries, or documentation
-- monitoring: When monitoring systems, metrics, or performance
-- diagnosis: When diagnosing problems, issues, or system health
-- optimization: When optimizing performance or configurations
-- maintenance: When performing maintenance or updates
+- analysis: Analyzing data, patterns, or performance metrics
+- investigation: Investigating issues, problems, or anomalies  
+- data_processing: Processing, transforming, or organizing data
+- reporting: Generating reports, summaries, or documentation
+- monitoring: Monitoring systems, metrics, or performance
+- diagnosis: Diagnosing problems, issues, or system health
+- optimization: Optimizing performance or configurations
+- maintenance: Performing maintenance or updates
+- planning: Creating plans, procedures, or structured approaches
 
-Focus on being accurate and informative. Extract the essence of what the agent did.
+CHARACTER LIMITS ARE MANDATORY:
+- description_first_party: Maximum 300 characters (count carefully)
+- description_events: Each item maximum 50 characters (count carefully)
+
+Guidelines for effective summaries:
+1. Be specific - include system names, dates, quantities when relevant
+2. Focus on outcomes and findings, not just actions
+3. Use active voice and clear, technical language
+4. Prioritize the most important information within character limits
+5. For events, capture the essence of each major step or finding
+
+CRITICAL: Validate character counts before responding. Truncate if necessary to meet limits.
 
 IMPORTANT: Respond ONLY with the JSON object, no additional text or formatting.
 """
@@ -77,7 +90,7 @@ structured_summarizer_agent = Agent(
     name="structured_summarizer_agent",
     model="gemini-2.5-flash-preview-05-20",
     description="Agent that creates structured summaries of other agent outputs",
-    generate_content_config=types.GenerateContentConfig(temperature=0.1),
+    # generate_content_config=types.GenerateContentConfig(temperature=0.1),
     instruction=get_structured_summarizer_prompt(),
     output_key="structured_summary",
 )
@@ -289,6 +302,6 @@ def summarize_agent_output_callback(callback_context: CallbackContext) -> None:
 
         summary = _run_summarizer_agent(agent_name, agent_output)
 
-        callback_context.state[f"ui_{agent_name}"] = summary.model_dump_json()
+        callback_context.state[f"ui_summary"] = summary.model_dump_json()
 
         # save the summary in the state

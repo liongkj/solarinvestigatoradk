@@ -87,8 +87,29 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     ]).pipe(
         map(([messages, showAllThoughts]: [AgentMessage[], boolean]) => {
             console.log('Computing visibleMessages, total messages:', messages.length, 'showAllThoughts:', showAllThoughts);
-            // Filter messages based on showAllThoughts setting
-            const filtered = messages.filter((msg: AgentMessage) => {
+
+            // Add investigation summary message if available and we're in the right tab
+            let allMessages = [...messages];
+
+            // Add investigation summary as first message if available
+            if (this.activeTab === 'all' || this.activeTab === 'summary') {
+                const summaryMessage = this.createInvestigationSummaryMessage();
+                if (summaryMessage) {
+                    allMessages = [summaryMessage, ...allMessages];
+                }
+            }
+
+            // Filter messages based on showAllThoughts setting and active tab
+            const filtered = allMessages.filter((msg: AgentMessage) => {
+                // Tab filtering
+                if (this.activeTab === 'summary' && !msg.metadata?.['is_investigation_summary']) {
+                    return false;
+                }
+                if (this.activeTab === 'messages' && msg.metadata?.['is_investigation_summary']) {
+                    return false;
+                }
+
+                // Thoughts filtering
                 if (showAllThoughts) {
                     return true;
                 }
@@ -98,6 +119,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             // Sort by backend timestamp primarily, sequence number as secondary
             // This ensures reliable ordering based on authoritative backend timestamps
             const sorted = filtered.sort((a: AgentMessage, b: AgentMessage) => {
+                // Special handling: investigation summary always first
+                if (a.metadata?.['is_investigation_summary'] && !b.metadata?.['is_investigation_summary']) {
+                    return -1;
+                }
+                if (!a.metadata?.['is_investigation_summary'] && b.metadata?.['is_investigation_summary']) {
+                    return 1;
+                }
+
                 // Primary sort: backend timestamp (authoritative)
                 const timeA = new Date(a.timestamp).getTime();
                 const timeB = new Date(b.timestamp).getTime();
@@ -151,6 +180,9 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // UI Summary support
     showUiSummaries = false;
     uiSummaryCache: Map<string, string> = new Map();
+
+    // Tab management for investigation views
+    activeTab: 'messages' | 'summary' | 'all' = 'all';
 
     // Streaming text support
     currentStreamingText = '';
@@ -237,6 +269,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     this.initializeProgressSteps();
                     this.updateProgressSteps();
                     this.loadChatMessages();
+
+                    // Trigger recomputation of visible messages to include investigation summary
+                    setTimeout(() => {
+                        this.chatMessagesSubject.next(this.chatMessagesSubject.value);
+                    }, 100);
                 }
             });
     }
@@ -508,8 +545,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
                 case 'ui_update':
                     if (event.ui_summary) {
-                        // Cache UI summary for display
+                        // Cache UI summary for display (for messages)
                         this.uiSummaryCache.set(event.investigation_id, event.ui_summary);
+
+                        // Update investigation summary if this is an investigation-level summary
+                        if (this.investigation && event.investigation_id === this.investigationId) {
+                            console.log('🔄 Updating investigation UI summary via SSE:', event.ui_summary);
+                            this.investigation.ui_summary = event.ui_summary;
+
+                            // Trigger recomputation of visible messages to include updated summary
+                            this.chatMessagesSubject.next(this.chatMessagesSubject.value);
+
+                            this.cdr.markForCheck(); // Trigger change detection
+                        }
                     }
                     break;
 
@@ -855,7 +903,68 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return !!(message.metadata?.['ui_summary']);
     }
 
+    // Investigation summary helpers
+    hasInvestigationSummary(): boolean {
+        return !!(this.investigation?.ui_summary);
+    }
 
+    shouldShowInvestigationSummaryPlaceholder(): boolean {
+        return this.showUiSummaries &&
+            this.investigation?.status === 'running' &&
+            !this.hasInvestigationSummary();
+    }
+
+    getInvestigationSummary(): string | null {
+        return this.investigation?.ui_summary || null;
+    }
+
+    // Tab management methods
+    setActiveTab(tab: 'messages' | 'summary' | 'all'): void {
+        this.activeTab = tab;
+        // Trigger recomputation of visible messages
+        this.chatMessagesSubject.next(this.chatMessagesSubject.value);
+    }
+
+    isTabActive(tab: 'messages' | 'summary' | 'all'): boolean {
+        return this.activeTab === tab;
+    }
+
+    // Get message count for each tab (for display in tab badges)
+    getTabMessageCount(tab: 'messages' | 'summary' | 'all'): number {
+        const allMessages = this.chatMessagesSubject.value;
+
+        switch (tab) {
+            case 'summary':
+                return this.hasInvestigationSummary() ? 1 : 0;
+            case 'messages':
+                return allMessages.length;
+            case 'all':
+                return allMessages.length + (this.hasInvestigationSummary() ? 1 : 0);
+            default:
+                return 0;
+        }
+    }
+
+    // Create investigation summary message for chat history
+    createInvestigationSummaryMessage(): AgentMessage | null {
+        if (!this.investigation?.ui_summary) return null;
+
+        return {
+            id: `investigation-summary-${this.investigation.id}`,
+            investigation_id: this.investigationId,
+            message_type: AgentMessageType.SYSTEM,
+            content: this.investigation.ui_summary,
+            timestamp: this.investigation.updated_at,
+            metadata: {
+                sequence: -1, // Special sequence to ensure it appears first
+                is_investigation_summary: true,
+                summary_type: 'investigation_overview'
+            },
+            ui_summary: this.investigation.ui_summary,
+            ui_state: { is_summary: true },
+            show_full_content: false
+        };
+    }
 
     setContentView(showSummaries: boolean): void {
         this.showUiSummaries = showSummaries;
