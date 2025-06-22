@@ -7,9 +7,12 @@ from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai import types
-
-from adk.agents.solar_investigation_agent import get_solar_investigation_agent
+from adk.problem_finder.agent import root_agent
 from adk.agents.ui_summarizer_agent import generate_ui_summary
+from google.adk.events import Event, EventActions
+from google.genai.types import Part, Content
+from datetime import timedelta
+import time
 
 # TODO: implement this
 # from adk.agents.workorder_agent import get_workorder_agent
@@ -191,7 +194,12 @@ class SimplifiedInvestigationService:
             "created_at": investigation.created_at.isoformat(),
             "updated_at": investigation.updated_at.isoformat(),
             "plant_name": investigation.plant_name,
+            "inverter_date_to_check": None,
+            "inverter_device_id_and_capacity_peak": None,
+            "date_requested": None,
+            "date_today": None,
         }
+        # TODO: TO be retrieved using context.state later
 
         # Create ADK session (this handles all storage automatically)
         await self.session_service.create_session(
@@ -261,6 +269,7 @@ class SimplifiedInvestigationService:
         self, investigation: Investigation
     ) -> None:  # TODO: add agent here
         """Process investigation using ADK best practices"""
+
         try:
             # Send initial investigation started event
             await self._queue_sse_event(
@@ -278,12 +287,15 @@ class SimplifiedInvestigationService:
 
             # Create agent with after_agent_callback for UI processing
             # AND workorder agent as sub-agent
-            agent = get_solar_investigation_agent(
-                output_key="investigation_result",  # ADK will auto-save to state
-                after_agent_callback=self._create_ui_summary_callback(investigation.id),
-                # TODO: Add workorder agent when implemented later
-                # workorder_agent=get_workorder_agent(),
-            )  # swap to out agent
+            # agent = create_root_agent(
+            #     investigation=investigation,
+            #     # output_key="investigation_result",  # ADK will auto-save to state
+            #     # after_agent_callback=self._create_ui_summary_callback(investigation.id),
+            #     # # TODO: Add workorder agent when implemented later
+            #     # # workorder_agent=get_workorder_agent(),
+            # )  # swap to out agent
+
+            agent = root_agent
 
             # Create runner
             runner = Runner(
@@ -310,7 +322,8 @@ class SimplifiedInvestigationService:
             final_response = None
             event_count = 0
             accumulated_text = ""
-
+            last_active_agent = None
+            last_status_sent = None
             async for event in runner.run_async(
                 user_id=self.default_user_id,
                 session_id=session_id,
@@ -333,6 +346,88 @@ class SimplifiedInvestigationService:
 
                 if event.is_final_response() and event.content and event.content.parts:
                     final_response = event.content.parts[0].text or ""
+
+                # Send status update only when agent changes (not for every event)
+                if event.author != last_active_agent:
+                    last_active_agent = event.author
+
+                    # Determine meaningful status based on agent and event content
+                    if event.author == "user":
+                        current_status = "Processing user input"
+
+                    elif event.get_function_calls():
+                        # Agent is calling tools
+                        tool_names = [call.name for call in event.get_function_calls()]
+                        tool_name = tool_names[0] if tool_names else "unknown tool"
+                        current_status = f"Using {tool_name}"
+                        map_tool_names = {
+                            "list_inverters_for_plant": "Looking up inverters for current plant..."
+                        }
+                        if tool_name in map_tool_names:
+                            tool_name_friendly = map_tool_names[tool_name]
+                            event_data = {
+                                "investigation_id": investigation.id,
+                                # "timestamp": datetime.now().isoformat(),
+                                "type": "streaming_text_chunk",
+                                "content": tool_name_friendly,
+                                "full_content": tool_name_friendly,
+                                "partial": True,
+                            }
+
+                            # Queue the chunk
+                            await self._queue_sse_event(investigation.id, event_data)
+                            state_changes = {
+                                "task_status": "active",
+                            }
+                            # actions_with_update = EventActions(
+                            #     state_delta=state_changes
+                            # )
+                            # system_event = Event(
+                            #     invocation_id="inv_login_update",
+                            #     author="system",  # Or 'agent', 'tool' etc.
+                            #     actions=actions_with_update,
+                            #     timestamp=time.time(),
+                            #     # content might be None or represent the action taken
+                            # )
+                            # session = await self.session_service.get_session(
+                            #     app_name=self.app_name,
+                            #     user_id=self.default_user_id,
+                            #     session_id=self._get_session_id(investigation.id),
+                            # )
+                            # await self.session_service.append_event(
+                            #     session, system_event
+                            # )
+                            # add to event state
+                    elif (
+                        event.content
+                        and event.content.parts
+                        and event.content.parts[0].text
+                    ):
+                        # Agent is generating text/analysis
+                        text_preview = event.content.parts[0].text[:50].strip()
+                        if text_preview:
+                            current_status = f"Agent {event.author} analyzing data"
+                        else:
+                            current_status = f"Agent {event.author} processing"
+                    else:
+                        current_status = f"Agent {event.author} working"
+
+                    # Only send if status actually changed
+                    if current_status != last_status_sent:
+                        logger.info(
+                            f"Sending progress update for {investigation.id}: '{current_status}'"
+                        )
+                        await self._queue_sse_event(
+                            investigation.id,
+                            {
+                                "type": "progress_update",  # Changed from status_update
+                                "investigation_id": investigation.id,
+                                "current_activity": current_status,  # Descriptive status
+                                "formal_status": "running",  # Keep formal status
+                                "timestamp": datetime.now().isoformat(),
+                            },
+                        )
+                        last_status_sent = current_status
 
             logger.info(
                 f"Completed ADK processing for investigation {investigation.id}, processed {event_count} events"
@@ -376,7 +471,7 @@ class SimplifiedInvestigationService:
             if investigation.id in self.active_runners:
                 del self.active_runners[investigation.id]
 
-    async def _handle_sub_agent_requests(self, investigation_id: str, event):
+        # async def _handle_sub_agent_requests(self, investigation_id: str, event):
         """Handle sub-agent requests like @workorder-agent"""
         try:
             if not event.content or not event.content.parts:
@@ -749,7 +844,7 @@ class SimplifiedInvestigationService:
         plant_name = plant.plant_name if plant else "Unknown Plant"
 
         return f"""
-        Please begin a comprehensive solar installation feasibility investigation for:
+        Investigate plant based on the following details:
         
         PLANT INFORMATION:
         - Plant ID: {investigation.plant_id}
@@ -763,29 +858,18 @@ class SimplifiedInvestigationService:
         ADDITIONAL CONTEXT:
         {investigation.additional_notes or "No additional specifications provided."}
         
-        AVAILABLE CAPABILITIES:
-        - If you need to create work orders for maintenance or installation tasks, you can request @workorder-agent
-        - You can pause the investigation at any time to wait for external information
-        - You can request human decisions when needed
         
-        Please provide a comprehensive solar feasibility assessment including site analysis, 
-        technical assessment, financial analysis, implementation roadmap, and clear recommendations.
-        
-        If you identify any maintenance needs or installation requirements that need work orders, 
-        please mention @workorder-agent with the specific requirements.
         """
 
     async def continue_investigation(
         self, investigation_id: str, user_message: str
     ) -> str:
-        """Continue investigation with user input"""
+        """Continue investigation with user input. Not implemented yet"""
         runner = self.active_runners.get(investigation_id)
+
         if not runner:
             # Recreate runner if needed
-            agent = get_solar_investigation_agent(
-                output_key="investigation_result",
-                after_agent_callback=self._create_ui_summary_callback(investigation_id),
-            )
+            agent = root_agent
             runner = Runner(
                 agent=agent,
                 app_name=self.app_name,

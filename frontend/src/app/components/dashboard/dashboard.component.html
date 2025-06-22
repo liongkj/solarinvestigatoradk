@@ -190,11 +190,24 @@
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label for="start_date" class="form-label">Start Date *</label>
+                        <!-- <div class="input-group">
+                            <input class="form-control" placeholder="dd/mm/yyyy" name="start_date"
+                                [(ngModel)]="newInvestigationForm.start_date" ngbDatepicker
+                                #startDatePicker="ngbDatepicker" (ngModelChange)="onDateChange()" readonly required
+                                [markDisabled]="markDisabled">
+                            <button class="btn btn-outline-secondary" (click)="openStartDatePicker(startDatePicker)"
+                                type="button">
+                                📅
+                            </button>
+                        </div> -->
+
                         <div class="input-group">
                             <input class="form-control" placeholder="dd/mm/yyyy" name="start_date"
                                 [(ngModel)]="newInvestigationForm.start_date" ngbDatepicker
-                                #startDatePicker="ngbDatepicker" (ngModelChange)="onDateChange()" readonly required>
-                            <button class="btn btn-outline-secondary" (click)="startDatePicker.open()" type="button">
+                                #startDatePicker="ngbDatepicker" (ngModelChange)="onDateChange()" readonly required
+                                [markDisabled]="markDisabled" [startDate]="defaultStartDate">
+                            <button class="btn btn-outline-secondary" (click)="openStartDatePicker(startDatePicker)"
+                                type="button">
                                 📅
                             </button>
                         </div>
@@ -206,8 +219,10 @@
                         <div class="input-group">
                             <input class="form-control" placeholder="dd/mm/yyyy" name="end_date"
                                 [(ngModel)]="newInvestigationForm.end_date" ngbDatepicker #endDatePicker="ngbDatepicker"
-                                (ngModelChange)="onDateChange()" readonly required>
-                            <button class="btn btn-outline-secondary" (click)="endDatePicker.open()" type="button">
+                                [startDate]="defaultStartDate" (ngModelChange)="onDateChange()" readonly required
+                                [markDisabled]="markDisabled">
+                            <button class="btn btn-outline-secondary" (click)="openEndDatePicker(endDatePicker)"
+                                type="button">
                                 📅
                             </button>
                         </div>
@@ -216,7 +231,7 @@
             </div>
 
             <div class="form-text text-muted mb-3">
-                📋 Maximum date range: 5 days
+                📋 Maximum date range: 5 days | 📅 Only May dates are available
             </div>
 
             <!-- Additional Notes -->

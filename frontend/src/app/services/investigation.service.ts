@@ -2,6 +2,7 @@ import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpParams, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, Subject, BehaviorSubject } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 import {
     Investigation,
     InvestigationRequest,
@@ -17,7 +18,7 @@ import {
 
 // SSE Event types
 export interface SSEEvent {
-    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'completion' | 'workorder_status' | 'investigation_deleted' | 'heartbeat' | 'error' | 'status' |
+    type: 'connected' | 'investigation_started' | 'message' | 'ui_update' | 'status_update' | 'progress_update' | 'completion' | 'workorder_status' | 'investigation_deleted' | 'heartbeat' | 'error' | 'status' |
     'streaming_text_chunk' | 'complete_text_message' | 'tool_call_request' | 'tool_result' | 'other_content' | 'state_artifact_update' | 'control_signal' | 'streaming_error';
     investigation_id: string;
     timestamp: string;
@@ -37,6 +38,8 @@ export interface SSEEvent {
     status?: string;
     result?: string;
     error?: string;
+    current_activity?: string;  // New field for descriptive activity status
+    formal_status?: string;     // New field for formal investigation status
     chunk_info?: {  // Information about debounced chunks
         chunk_index: number;
         total_chunks: number;
@@ -48,7 +51,7 @@ export interface SSEEvent {
     providedIn: 'root'
 })
 export class InvestigationService {
-    private readonly baseUrl = 'http://localhost:8000/api/investigations/';
+    private readonly baseUrl = `${environment.apiUrl}/investigations/`;
 
     // SSE event streams by investigation ID
     private sseStreams: Map<string, EventSource> = new Map();

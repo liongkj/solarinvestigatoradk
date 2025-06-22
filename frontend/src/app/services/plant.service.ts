@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { tap, catchError, map } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 import { Plant } from '../models/plant';
 
 // Interface for the API response
@@ -14,7 +15,7 @@ interface PlantsResponse {
     providedIn: 'root'
 })
 export class PlantService {
-    private readonly baseUrl = 'http://localhost:8000/api/plants/';
+    private readonly baseUrl = `${environment.apiUrl}/plants/`;
 
     constructor(private http: HttpClient) { }
 

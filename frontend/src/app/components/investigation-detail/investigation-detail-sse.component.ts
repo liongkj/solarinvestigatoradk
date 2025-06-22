@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone, ChangeDetectio
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { interval, Subscription, Subject, of, BehaviorSubject, Observable } from 'rxjs';
+import { interval, Subscription, Subject, of, BehaviorSubject, Observable, combineLatest } from 'rxjs';
 import { takeUntil, switchMap, catchError, finalize, tap, observeOn, map, shareReplay } from 'rxjs/operators';
 import { asapScheduler } from 'rxjs';
 import { InvestigationService, SSEEvent } from '../../services/investigation.service';
@@ -26,6 +26,16 @@ interface ProgressStep {
     timestamp: string | null;
 }
 
+// Interface for parsed structured summary
+interface ParsedSummary {
+    mainTheme: string;
+    actionTaken: string;
+    actionType: string;
+    description: string;
+    nextSteps?: string;
+    keyEvents: string[];
+}
+
 @Component({
     selector: 'app-investigation-detail',
     standalone: true,
@@ -46,6 +56,18 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     private workordersSubject = new BehaviorSubject<any[]>([]);
     private streamingTextSubject = new BehaviorSubject<string>('');
     private isStreamingSubject = new BehaviorSubject<boolean>(false);
+
+    // Track current activity from backend progress updates (using BehaviorSubject to maintain state)
+    private currentActivitySubject = new BehaviorSubject<string>('Initializing...');
+    public readonly currentActivity$ = this.currentActivitySubject.asObservable();
+
+    // Chat message filtering - make reactive
+    private showAllThoughtsSubject = new BehaviorSubject<boolean>(false);
+    public readonly showAllThoughts$ = this.showAllThoughtsSubject.asObservable();
+
+    // Tab management for investigation views - using reactive streams
+    private activeTabSubject = new BehaviorSubject<'messages' | 'summary' | 'all'>('summary');
+    public readonly activeTab$ = this.activeTabSubject.asObservable();
 
     // Public observables for template consumption - use asObservable() to prevent external modification
     public readonly realTimeEvents$ = this.realTimeEventsSubject.asObservable().pipe(
@@ -73,34 +95,73 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     );
 
     // Computed observables
-    public readonly visibleMessages$ = this.chatMessages$.pipe(
-        // map(messages => {
-        //     console.log('Computing visibleMessages, total messages:', messages.length);
-        //     // const filtered = messages.filter(msg => this.shouldShowMessage(msg));
+    public readonly visibleMessages$ = combineLatest([
+        this.chatMessages$,
+        this.showAllThoughts$,
+        this.activeTab$
+    ]).pipe(
+        map(([messages, showAllThoughts, activeTab]: [AgentMessage[], boolean, 'messages' | 'summary' | 'all']) => {
+            console.log('Computing visibleMessages, total messages:', messages.length, 'showAllThoughts:', showAllThoughts, 'activeTab:', activeTab);
 
-        //     // Sort by backend timestamp primarily, sequence number as secondary
-        //     // This ensures reliable ordering based on authoritative backend timestamps
-        //     const sorted = filtered.sort((a, b) => {
-        //         // Primary sort: backend timestamp (authoritative)
-        //         const timeA = new Date(a.timestamp).getTime();
-        //         const timeB = new Date(b.timestamp).getTime();
+            // Add investigation summary message if available and we're in the right tab
+            let allMessages = [...messages];
 
-        //         if (timeA !== timeB) {
-        //             console.log(`🔍 Sorting by timestamp: ${a.message_type}(${timeA}) vs ${b.message_type}(${timeB}) = ${timeA - timeB}`);
-        //             return timeA - timeB; // Ascending order (oldest first)
-        //         }
+            // Add investigation summary as first message if available
+            if (activeTab === 'all' || activeTab === 'summary') {
+                const summaryMessage = this.createInvestigationSummaryMessage();
+                if (summaryMessage) {
+                    allMessages = [summaryMessage, ...allMessages];
+                }
+            }
 
-        //         // Secondary sort: sequence number for messages with identical timestamps
-        //         const seqA = a.metadata?.['sequence'] || 0;
-        //         const seqB = b.metadata?.['sequence'] || 0;
-        //         console.log(`🔍 Sorting by sequence (same timestamp): ${a.message_type}(seq:${seqA}) vs ${b.message_type}(seq:${seqB}) = ${seqA - seqB}`);
-        //         return seqA - seqB; // Ascending order (earliest sequence first)
-        //     });
+            // Filter messages based on showAllThoughts setting and active tab
+            const filtered = allMessages.filter((msg: AgentMessage) => {
+                // Tab filtering
+                if (activeTab === 'summary' && !msg.metadata?.['is_investigation_summary']) {
+                    return false;
+                }
+                if (activeTab === 'messages' && msg.metadata?.['is_investigation_summary']) {
+                    return false;
+                }
 
-        //     console.log('Filtered and sorted messages by backend timestamp:', sorted.length);
-        //     return sorted;
-        // }),
-        // tap(visible => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
+                // Thoughts filtering
+                if (showAllThoughts) {
+                    return true;
+                }
+                return msg.message_type !== AgentMessageType.THINKING;
+            });
+
+            // Sort by backend timestamp primarily, sequence number as secondary
+            // This ensures reliable ordering based on authoritative backend timestamps
+            const sorted = filtered.sort((a: AgentMessage, b: AgentMessage) => {
+                // Special handling: investigation summary always first
+                if (a.metadata?.['is_investigation_summary'] && !b.metadata?.['is_investigation_summary']) {
+                    return -1;
+                }
+                if (!a.metadata?.['is_investigation_summary'] && b.metadata?.['is_investigation_summary']) {
+                    return 1;
+                }
+
+                // Primary sort: backend timestamp (authoritative)
+                const timeA = new Date(a.timestamp).getTime();
+                const timeB = new Date(b.timestamp).getTime();
+
+                if (timeA !== timeB) {
+                    console.log(`🔍 Sorting by timestamp: ${a.message_type}(${timeA}) vs ${b.message_type}(${timeB}) = ${timeA - timeB}`);
+                    return timeA - timeB; // Ascending order (oldest first)
+                }
+
+                // Secondary sort: sequence number for messages with identical timestamps
+                const seqA = a.metadata?.['sequence'] || 0;
+                const seqB = b.metadata?.['sequence'] || 0;
+                console.log(`🔍 Sorting by sequence (same timestamp): ${a.message_type}(seq:${seqA}) vs ${b.message_type}(seq:${seqB}) = ${seqA - seqB}`);
+                return seqA - seqB; // Ascending order (earliest sequence first)
+            });
+
+            console.log('Filtered and sorted messages by backend timestamp for tab:', activeTab, '- count:', sorted.length);
+            return sorted;
+        }),
+        tap((visible: AgentMessage[]) => console.log('visibleMessages$ emitting:', visible.length, 'visible messages')),
         shareReplay(1)
     );
 
@@ -118,18 +179,27 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // Auto-scroll support for ChatGPT-like behavior
     @ViewChild('messagesContainer', { static: false }) messagesContainer?: ElementRef;
 
-    // Progress tracking
+    // Progress tracking - Dynamic steps based on actual agent activity
     progressSteps: ProgressStep[] = [
-        { name: 'Investigation Started', completed: true, timestamp: null },
-        { name: 'Planning', completed: false, timestamp: null },
-        { name: 'Evidence Collection', completed: false, timestamp: null },
-        { name: 'Analyzing', completed: false, timestamp: null },
-        { name: 'Investigation Complete', completed: false, timestamp: null }
+        { name: 'Investigation Started', completed: false, timestamp: null },
+        // { name: 'Agent Analysis', completed: false, timestamp: null },
+        // { name: 'Tool Execution', completed: false, timestamp: null },
+        // { name: 'Data Processing', completed: false, timestamp: null },
+        // { name: 'Investigation Complete', completed: false, timestamp: null }
     ];
+
+    // Track progress step history for dynamic updates
+    private agentActivities: Set<string> = new Set();
+    private toolActivities: Set<string> = new Set();
 
     // UI Summary support
     showUiSummaries = false;
     uiSummaryCache: Map<string, string> = new Map();
+
+    // Keep activeTab for template binding compatibility
+    get activeTab(): 'messages' | 'summary' | 'all' {
+        return this.activeTabSubject.value;
+    }
 
     // Streaming text support
     currentStreamingText = '';
@@ -166,7 +236,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             console.log('💬 chatMessages$ observable emitted to subscriber:', messages.length, 'messages');
         });
 
-        this.visibleMessages$.pipe(takeUntil(this.destroy$)).subscribe(messages => {
+        this.visibleMessages$.pipe(takeUntil(this.destroy$)).subscribe((messages: AgentMessage[]) => {
             console.log('👁️ visibleMessages$ observable emitted to subscriber:', messages.length, 'visible messages');
         });
 
@@ -191,6 +261,8 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         this.workordersSubject.complete();
         this.streamingTextSubject.complete();
         this.isStreamingSubject.complete();
+        this.currentActivitySubject.complete();
+        this.showAllThoughtsSubject.complete();
     }
 
     loadInvestigationDetails(): void {
@@ -211,8 +283,14 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                 if (investigation) {
                     console.log('Investigation loaded:', investigation);
                     this.investigation = investigation;
+                    this.initializeProgressSteps();
                     this.updateProgressSteps();
                     this.loadChatMessages();
+
+                    // Trigger recomputation of visible messages to include investigation summary
+                    setTimeout(() => {
+                        this.chatMessagesSubject.next(this.chatMessagesSubject.value);
+                    }, 100);
                 }
             });
     }
@@ -261,6 +339,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     firstTimestamp: sortedMessages[0]?.timestamp,
                     lastTimestamp: sortedMessages[sortedMessages.length - 1]?.timestamp
                 });
+                console.log('🔥 Setting chatMessagesSubject.next with', sortedMessages.length, 'messages');
                 this.chatMessagesSubject.next(sortedMessages);
             });
     }
@@ -303,6 +382,20 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         }
     }
 
+    private initializeProgressSteps(): void {
+        if (this.investigation) {
+            // Mark investigation as started when investigation is loaded
+            this.progressSteps[0].completed = true;
+            this.progressSteps[0].timestamp = this.investigation.created_at;
+
+            // Mark completion if investigation is completed
+            if (this.investigation.status === 'completed') {
+                this.progressSteps[4].completed = true;
+                this.progressSteps[4].timestamp = this.investigation.completed_at || this.investigation.updated_at;
+            }
+        }
+    }
+
     private updateProgressStepsFromAgentStats(): void {
         if (!this.investigation?.agent_stats) return;
 
@@ -324,6 +417,62 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         if (stats.total_events > 5) {
             this.progressSteps[3].completed = true;
             this.progressSteps[3].timestamp = timestamp;
+        }
+    }
+
+    private updateDynamicProgressSteps(currentActivity: string): void {
+        console.log('🔄 Updating progress steps for activity:', currentActivity);
+        const timestamp = new Date().toISOString();
+
+        // Mark investigation as started
+        if (!this.progressSteps[0].completed) {
+            this.progressSteps[0].completed = true;
+            this.progressSteps[0].timestamp = timestamp;
+            console.log('✅ Marked investigation as started');
+        }
+
+        // Track agent activities - match backend patterns
+        if (currentActivity.includes('Agent') && (currentActivity.includes('analyzing') || currentActivity.includes('processing') || currentActivity.includes('working'))) {
+            console.log('🤖 Agent activity detected:', currentActivity);
+            this.agentActivities.add(currentActivity);
+            if (!this.progressSteps[1].completed) {
+                this.progressSteps[1].completed = true;
+                this.progressSteps[1].timestamp = timestamp;
+                this.progressSteps[1].name = `Agent Analysis (${this.agentActivities.size} agents active)`;
+                console.log('✅ Marked agent analysis as completed');
+            } else {
+                this.progressSteps[1].name = `Agent Analysis (${this.agentActivities.size} agents active)`;
+            }
+        }
+
+        // Track tool activities - match backend patterns
+        if (currentActivity.includes('Using') || (currentActivity.includes('Agent') && currentActivity.includes('calling tools'))) {
+            console.log('🔧 Tool activity detected:', currentActivity);
+            this.toolActivities.add(currentActivity);
+            if (!this.progressSteps[2].completed) {
+                this.progressSteps[2].completed = true;
+                this.progressSteps[2].timestamp = timestamp;
+                this.progressSteps[2].name = `Tool Execution (${this.toolActivities.size} tools used)`;
+                console.log('✅ Marked tool execution as completed');
+            } else {
+                this.progressSteps[2].name = `Tool Execution (${this.toolActivities.size} tools used)`;
+            }
+        }
+
+        // Mark data processing when we have both agents and tools working
+        if (this.agentActivities.size > 0 && this.toolActivities.size > 0) {
+            if (!this.progressSteps[3].completed) {
+                this.progressSteps[3].completed = true;
+                this.progressSteps[3].timestamp = timestamp;
+                console.log('✅ Marked data processing as completed (agents + tools active)');
+            }
+        }
+
+        // Investigation completion is handled by formal status updates
+        if (this.investigation?.status === 'completed') {
+            this.progressSteps[4].completed = true;
+            this.progressSteps[4].timestamp = this.investigation.completed_at || timestamp;
+            console.log('✅ Marked investigation as completed');
         }
     }
 
@@ -413,8 +562,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
                 case 'ui_update':
                     if (event.ui_summary) {
-                        // Cache UI summary for display
+                        // Cache UI summary for display (for messages)
                         this.uiSummaryCache.set(event.investigation_id, event.ui_summary);
+
+                        // Update investigation summary if this is an investigation-level summary
+                        if (this.investigation && event.investigation_id === this.investigationId) {
+                            console.log('🔄 Updating investigation UI summary via SSE:', event.ui_summary);
+                            this.investigation.ui_summary = event.ui_summary;
+
+                            // Trigger recomputation of visible messages to include updated summary
+                            this.chatMessagesSubject.next(this.chatMessagesSubject.value);
+
+                            this.cdr.markForCheck(); // Trigger change detection
+                        }
                     }
                     break;
 
@@ -425,6 +585,21 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                         this.investigation.status = event.status as InvestigationStatus;
                         this.updateProgressSteps();
                     }
+                    break;
+
+                case 'progress_update':
+                    console.log('🔄 Progress update received:', event.current_activity);
+                    // Update current activity display using BehaviorSubject
+                    if (event.current_activity) {
+                        this.currentActivitySubject.next(event.current_activity);
+                        this.updateDynamicProgressSteps(event.current_activity);
+                    }
+                    // Update formal status if provided
+                    if (this.investigation && event.formal_status) {
+                        this.investigation.status = event.formal_status as InvestigationStatus;
+                        this.updateProgressSteps();
+                    }
+                    this.cdr.markForCheck(); // Trigger change detection
                     break;
 
                 case 'completion':
@@ -645,19 +820,46 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return this.investigation?.status === InvestigationStatus.FAILED;
     }
 
-    // toggleAllThoughts(): void {
-    //     this.showAllThoughts = !this.showAllThoughts;
-    // }
+    // Chat message filtering
+    toggleAllThoughts(): void {
+        const currentValue = this.showAllThoughtsSubject.value;
+        this.showAllThoughtsSubject.next(!currentValue);
+    }
 
-    // shouldShowMessage(message: AgentMessage): boolean {
-    //     if (this.showAllThoughts) {
-    //         return true;
-    //     }
-    //     return message.message_type !== AgentMessageType.THINKING;
-    // }
+    shouldShowMessage(message: AgentMessage): boolean {
+        const showAllThoughts = this.showAllThoughtsSubject.value;
+        if (showAllThoughts) {
+            return true;
+        }
+        return message.message_type !== AgentMessageType.THINKING;
+    }
 
     formatTimestamp(timestamp: string): string {
         return new Date(timestamp).toLocaleString();
+    }
+
+    // Tab management methods
+    isTabActive(tab: 'messages' | 'summary' | 'all'): boolean {
+        return this.activeTab === tab;
+    }
+
+    setActiveTab(tab: 'messages' | 'summary' | 'all'): void {
+        this.activeTabSubject.next(tab);
+    }
+
+    getTabMessageCount(tab: 'messages' | 'summary' | 'all'): number {
+        const messages = this.chatMessagesSubject.value;
+
+        switch (tab) {
+            case 'all':
+                return messages.length;
+            case 'summary':
+                return messages.filter(msg => msg.metadata?.['is_investigation_summary']).length;
+            case 'messages':
+                return messages.filter(msg => !msg.metadata?.['is_investigation_summary']).length;
+            default:
+                return 0;
+        }
     }
 
     // Debug methods to help track UI updates
@@ -738,14 +940,101 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         return message.content;
     }
 
-    hasUiSummary(message: AgentMessage): boolean {
-        return !!(message.metadata?.['ui_summary']);
+    // Investigation summary helpers
+    hasInvestigationSummary(): boolean {
+        return !!(this.investigation?.ui_summary);
     }
 
+    shouldShowInvestigationSummaryPlaceholder(): boolean {
+        return this.showUiSummaries &&
+            this.investigation?.status === 'running' &&
+            !this.hasInvestigationSummary();
+    }
 
+    getInvestigationSummary(): string | null {
+        return this.investigation?.ui_summary || null;
+    }
 
-    setContentView(showSummaries: boolean): void {
-        this.showUiSummaries = showSummaries;
+    // Get parsed investigation summary
+    getParsedInvestigationSummary(): ParsedSummary | null {
+        const summary = this.getInvestigationSummary();
+        return summary ? this.parseUiSummary(summary) : null;
+    }
+
+    // Parse structured summary from JSON string
+    parseUiSummary(uiSummary: string): ParsedSummary | null {
+        try {
+            const parsed = JSON.parse(uiSummary);
+            return {
+                mainTheme: parsed.main_theme || 'Investigation Analysis',
+                actionTaken: parsed.action_taken || 'Analysis completed',
+                actionType: parsed.action_type || 'analysis',
+                description: parsed.description_first_party || parsed.description || 'Processing completed',
+                nextSteps: parsed.next_steps,
+                keyEvents: parsed.description_events || []
+            };
+        } catch (error) {
+            console.warn('Failed to parse UI summary:', error);
+            return null;
+        }
+    }
+
+    // Get action type icon
+    getActionTypeIcon(actionType: string): string {
+        const iconMap: { [key: string]: string } = {
+            'analysis': 'fas fa-chart-line',
+            'investigation': 'fas fa-search',
+            'data_processing': 'fas fa-database',
+            'reporting': 'fas fa-file-alt',
+            'monitoring': 'fas fa-eye',
+            'diagnosis': 'fas fa-stethoscope',
+            'optimization': 'fas fa-cogs',
+            'maintenance': 'fas fa-tools',
+            'planning': 'fas fa-calendar-alt'
+        };
+        return iconMap[actionType] || 'fas fa-info-circle';
+    }
+
+    // Get action type color class
+    getActionTypeColor(actionType: string): string {
+        const colorMap: { [key: string]: string } = {
+            'analysis': 'text-primary',
+            'investigation': 'text-warning',
+            'data_processing': 'text-info',
+            'reporting': 'text-success',
+            'monitoring': 'text-secondary',
+            'diagnosis': 'text-danger',
+            'optimization': 'text-purple',
+            'maintenance': 'text-dark',
+            'planning': 'text-indigo'
+        };
+        return colorMap[actionType] || 'text-muted';
+    }
+
+    // Check if message has structured summary
+    hasStructuredSummary(message: AgentMessage): boolean {
+        return !!(message.metadata?.['ui_summary'] && this.showUiSummaries);
+    }
+
+    // Create investigation summary message for chat history
+    createInvestigationSummaryMessage(): AgentMessage | null {
+        if (!this.investigation?.ui_summary) return null;
+
+        return {
+            id: `investigation-summary-${this.investigation.id}`,
+            investigation_id: this.investigationId,
+            message_type: AgentMessageType.SYSTEM,
+            content: this.investigation.ui_summary,
+            timestamp: this.investigation.updated_at,
+            metadata: {
+                sequence: -1, // Special sequence to ensure it appears first
+                is_investigation_summary: true,
+                summary_type: 'investigation_overview'
+            },
+            ui_summary: this.investigation.ui_summary,
+            ui_state: { is_summary: true },
+            show_full_content: false
+        };
     }
 
     loadInvestigationDetailsSilently(): void {
@@ -846,5 +1135,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         } catch (err) {
             console.log('Error scrolling to bottom:', err);
         }
+    }
+
+    // Get parsed UI summary for agent messages
+    getParsedMessageSummary(message: AgentMessage): ParsedSummary | null {
+        const summary = message.metadata?.['ui_summary'];
+        return summary ? this.parseUiSummary(summary) : null;
+    }
+
+    // Check if agent message has structured summary
+    hasStructuredMessageSummary(message: AgentMessage): boolean {
+        return this.showUiSummaries &&
+            message.message_type === 'agent' &&
+            !!(message.metadata?.['ui_summary']) &&
+            !!this.getParsedMessageSummary(message);
     }
 }

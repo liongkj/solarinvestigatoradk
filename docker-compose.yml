@@ -11,8 +11,8 @@ services:
       POSTGRES_USER: adk_user
       POSTGRES_PASSWORD: my-password
       POSTGRES_DB: adk_db
-    ports:
-      - "9432:5432"
+    # ports:
+    #   - "9432:5432"
     volumes:
       - timeseries_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,72 +34,45 @@ services:
     #   retries: 5
     #   interval: 5s
 
-  # Legacy LangGraph services (keep for reference)
-  # langgraph-postgres:
-  #   image: postgres:16
-  #   ports:
-  #     - "5453:5432"
-  #   environment:
-  #     POSTGRES_DB: postgres
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #   volumes:
-  #     - langgraph-data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: pg_isready -U postgres
-  #     start_period: 10s
-  #     timeout: 1s
-  #     retries: 5
-  #     interval: 5s
+  # FastAPI Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: solar_backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      adk_db:
+        condition: service_healthy
+    env_file:
+      - .env.docker  # Optional local overrides (gitignored)
+    environment:
+      - DATABASE_URL=postgresql://adk_user:my-password@adk_db:5432/adk_db
+      - CORS_ORIGINS=["http://localhost:3000", "http://localhost:4200", "http://localhost:5173", "http://frontend:4200"]
+      - CORS_ALLOW_CREDENTIALS=true
+      - CORS_ALLOW_METHODS=["*"]
+      - CORS_ALLOW_HEADERS=["*"]
+      # Add your Gemini API key here for Docker
+      # - GEMINI_API_KEY=your-gemini-api-key-here
+    volumes:
+      - ./backend:/app
+    command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # langgraph-redis:
-  #   image: redis:7-alpine
-  #   ports:
-  #     - "6380:6379"
-  #   healthcheck:
-  #     test: redis-cli ping
-  #     start_period: 10s
-  #     timeout: 1s
-  #     retries: 5
-  #     interval: 5s
-  # # FastAPI application with ADK
-  # adk-api:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "8000:8000"
-  #   depends_on:
-  #     adk-postgres:
-  #       condition: service_healthy
-  #     adk-redis:
-  #       condition: service_healthy
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     DATABASE_URL: postgresql://adk_user:adk_password@adk-postgres:5432/adk_solar_investigator
-  #     REDIS_URL: redis://adk-redis:6379
-  #     ENVIRONMENT: development
-  #   volumes:
-  #     - ./backend:/app
-  #   command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-
-  # # Legacy LangGraph API (keep for reference)
-  # langgraph-api:
-  #   build:
-  #     context: .
-  #     dockerfile: ./Dockerfile
-  #   ports:
-  #     - "8123:8000"
-  #   depends_on:
-  #     langgraph-redis:
-  #       condition: service_healthy
-  #     langgraph-postgres:
-  #       condition: service_healthy
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     # GEMINI_API_KEY: ${GEMINI_API_KEY}
-  #     LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
-  #     REDIS_URI: redis://langgraph-redis:6379
-  #     POSTGRES_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable
+  # Angular Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: solar_frontend
+    ports:
+      - "4200:4200"
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - API_URL=http://backend:8000/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm start -- --host 0.0.0.0 --port 4200 --disable-host-check
+    depends_on:
+      - backend

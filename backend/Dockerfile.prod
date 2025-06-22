@@ -1,0 +1,63 @@
+# Production Dockerfile for FastAPI backend
+FROM python:3.13-slim as builder
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies for building
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast Python package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Copy project files
+COPY pyproject.toml ./
+COPY uv.lock* ./
+
+# Install dependencies
+RUN if [ -f "uv.lock" ]; then \
+    uv sync --frozen --no-dev; \
+    else \
+    uv sync --no-dev; \
+    fi
+
+# Production stage
+FROM python:3.13-slim
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy uv and virtual environment from builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=builder /app/.venv /app/.venv
+
+# Make sure to use venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy source code
+COPY --chown=appuser:appuser . .
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Command to run the application
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

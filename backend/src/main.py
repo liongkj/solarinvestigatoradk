@@ -73,37 +73,11 @@ async def root():
     }
 
 
+# Health check endpoint for production
 @app.get("/health")
 async def health_check():
-    """Health check endpoint with database connectivity test"""
-    try:
-        # Test database connection by trying to access the session service
-        # The ADK FastAPI app should have initialized the DatabaseSessionService
-        return {
-            "status": "healthy",
-            "version": settings.app_version,
-            "timestamp": "2025-06-14T00:00:00Z",
-            "adk_status": "ready",
-            "database": {
-                "status": "connected",
-                "url": (
-                    settings.database_url.split("@")[1]
-                    if "@" in settings.database_url
-                    else "configured"
-                ),
-                "service": "DatabaseSessionService",
-            },
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "unhealthy",
-                "error": str(e),
-                "database": {"status": "disconnected"},
-            },
-        )
+    """Health check endpoint for load balancers and monitoring"""
+    return {"status": "healthy", "service": "solar-investigator-backend"}
 
 
 @app.post("/api/investigate")

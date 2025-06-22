@@ -161,6 +161,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.docker.local
 .venv
 env/
 venv/
@@ -202,3 +203,4 @@ cython_debug/
 backend/.langgraph_api
 backend/solar_investigation_data.db
 backend/solar_investigation_data.db
+.env.docker

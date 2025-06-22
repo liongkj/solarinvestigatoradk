@@ -13,9 +13,15 @@
                     </span>
                 </div>
                 <div *ngIf="investigation">
-                    <span class="badge fs-6" [class]="getStatusClass()">
-                        {{ investigation.status | titlecase }}
-                    </span>
+                    <div class="d-flex flex-column align-items-end">
+                        <span class="badge fs-6" [class]="getStatusClass()">
+                            {{ investigation.status | titlecase }}
+                        </span>
+                        <small class="text-muted mt-1"
+                            *ngIf="(currentActivity$ | async) && investigation.status === 'running'">
+                            <i class="fas fa-cog fa-spin me-1"></i>{{ currentActivity$ | async }}
+                        </small>
+                    </div>
                 </div>
             </div>
 
@@ -63,6 +69,103 @@
                         </div>
                     </div>
 
+                    <!-- Investigation Summary Card -->
+                    <div class="card mb-4 investigation-summary-card"
+                        *ngIf="hasInvestigationSummary() && showUiSummaries">
+                        <ng-container *ngIf="getParsedInvestigationSummary() as parsedSummary; else rawSummary">
+                            <!-- Structured Summary Display -->
+                            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                <div class="d-flex align-items-center">
+                                    <i [class]="getActionTypeIcon(parsedSummary.actionType)"
+                                        [class]="getActionTypeColor(parsedSummary.actionType) + ' me-2'"></i>
+                                    <div>
+                                        <h6 class="card-title mb-0 text-dark">{{ parsedSummary.mainTheme }}</h6>
+                                        <small class="text-muted">{{ parsedSummary.actionType | titlecase }}</small>
+                                    </div>
+                                </div>
+                                <span class="badge ai-generated-badge">
+                                    <i class="fas fa-robot"></i> AI Generated
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <!-- Action Summary Section -->
+                                <div class="action-summary mb-3">
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-check-circle text-success me-1"></i>
+                                        What Was Done
+                                    </h6>
+                                    <p class="mb-3">{{ parsedSummary.actionTaken }}</p>
+
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-info-circle text-primary me-1"></i>
+                                        Key Description
+                                    </h6>
+                                    <p class="mb-3">{{ parsedSummary.description }}</p>
+                                </div>
+
+                                <!-- Key Findings Cards -->
+                                <div class="key-findings mb-3" *ngIf="parsedSummary.keyEvents?.length">
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-list-ul text-info me-1"></i>
+                                        Key Events
+                                    </h6>
+                                    <div class="row g-2">
+                                        <div class="col-12" *ngFor="let event of parsedSummary.keyEvents">
+                                            <div class="finding-card p-2 bg-light rounded d-flex align-items-center">
+                                                <i class="fas fa-check-circle text-success me-2"></i>
+                                                <span class="small">{{ event }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Next Steps Section -->
+                                <div
+                                    *ngIf="parsedSummary.nextSteps && parsedSummary.nextSteps !== 'No specific next steps provided'">
+                                    <h6 class="mb-2">
+                                        <i class="fas fa-arrow-right text-warning me-1"></i>
+                                        Recommended Next Steps
+                                    </h6>
+                                    <p class="mb-0">{{ parsedSummary.nextSteps }}</p>
+                                </div>
+                            </div>
+                        </ng-container>
+
+                        <!-- Fallback: Raw Summary Display -->
+                        <ng-template #rawSummary>
+                            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                <h5 class="card-title mb-0 text-dark">
+                                    <i class="fas fa-lightbulb me-2 text-warning"></i>
+                                    Investigation Summary
+                                </h5>
+                                <span class="badge ai-generated-badge">
+                                    <i class="fas fa-robot"></i> AI Generated
+                                </span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="investigation-summary-text mb-0">
+                                    {{ getInvestigationSummary() }}
+                                </div>
+                            </div>
+                        </ng-template>
+                    </div>
+
+                    <!-- Investigation Summary Placeholder (when summary mode is on but no summary available) -->
+                    <div class="card mb-4 border-warning" *ngIf="shouldShowInvestigationSummaryPlaceholder()">
+                        <div class="card-header bg-warning bg-opacity-10">
+                            <h5 class="card-title mb-0 text-warning">
+                                <i class="fas fa-cog fa-spin me-2"></i>
+                                Generating Investigation Summary...
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-muted text-center py-3">
+                                <i class="fas fa-robot fa-2x mb-2 text-warning"></i>
+                                <p class="mb-0">AI is analyzing the investigation and will generate a summary soon.</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Progress Card -->
                     <div class="card mb-4">
                         <div class="card-header">
@@ -74,6 +177,15 @@
                                     [attr.aria-valuenow]="getProgressPercentage()">
                                     {{ getProgressPercentage() }}%
                                 </div>
+                            </div>
+
+                            <!-- Current Activity Indicator -->
+                            <div *ngIf="(currentActivity$ | async) && investigation.status === 'running'"
+                                class="current-activity-indicator mb-3 p-2 bg-light rounded">
+                                <small class="text-primary">
+                                    <i class="fas fa-cog fa-spin me-2"></i>
+                                    <strong>Current Activity:</strong> {{ currentActivity$ | async }}
+                                </small>
                             </div>
 
                             <div class="progress-steps">
@@ -128,19 +240,40 @@
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="card-title mb-0">Investigation Progress</h5>
-                            <div class="btn-group btn-group-sm" role="group" aria-label="Content display toggle">
-                                <input type="radio" class="btn-check" name="contentView" id="fullContent"
-                                    [checked]="!showUiSummaries" (change)="setContentView(false)">
-                                <label class="btn btn-outline-primary" for="fullContent">
-                                    <i class="fas fa-align-left me-1"></i>Full Content
-                                </label>
 
-                                <input type="radio" class="btn-check" name="contentView" id="summaries"
-                                    [checked]="showUiSummaries" (change)="setContentView(true)">
-                                <label class="btn btn-outline-primary" for="summaries">
-                                    <i class="fas fa-list-ul me-1"></i>Summaries
-                                </label>
-                            </div>
+                            <!-- Tabbed Navigation -->
+                            <ul class="nav nav-pills nav-sm" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('summary')"
+                                        (click)="setActiveTab('summary')" type="button">
+                                        <i class="fas fa-lightbulb me-1"></i>Summary
+                                        <span class="badge bg-light text-dark ms-1"
+                                            *ngIf="getTabMessageCount('summary') > 0">
+                                            {{ getTabMessageCount('summary') }}
+                                        </span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('messages')"
+                                        (click)="setActiveTab('messages')" type="button">
+                                        <i class="fas fa-comments me-1"></i>Messages
+                                        <span class="badge bg-light text-dark ms-1"
+                                            *ngIf="getTabMessageCount('messages') > 0">
+                                            {{ getTabMessageCount('messages') }}
+                                        </span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link px-3 py-1" [class.active]="isTabActive('all')"
+                                        (click)="setActiveTab('all')" type="button">
+                                        <i class="fas fa-list me-1"></i>All
+                                        <span class="badge bg-light text-dark ms-1"
+                                            *ngIf="getTabMessageCount('all') > 0">
+                                            {{ getTabMessageCount('all') }}
+                                        </span>
+                                    </button>
+                                </li>
+                            </ul>
                         </div>
                         <div class="card-body chat-container">
 
@@ -149,19 +282,122 @@
 
                                 <div *ngIf="(visibleMessages$ | async)?.length === 0"
                                     class="text-center text-muted py-5">
-                                    <i class="fas fa-comments fa-3x mb-3"></i>
-                                    <p>No messages yet. The investigation will start soon...</p>
+                                    <div *ngIf="activeTab === 'summary'">
+                                        <i class="fas fa-lightbulb fa-3x mb-3 text-warning"></i>
+                                        <h5>No Investigation Summary Yet</h5>
+                                        <p>The AI will generate a summary once the investigation progresses.</p>
+                                    </div>
+                                    <div *ngIf="activeTab === 'messages'">
+                                        <i class="fas fa-comments fa-3x mb-3"></i>
+                                        <h5>No Messages Yet</h5>
+                                        <p>Investigation messages will appear here as the agent works.</p>
+                                    </div>
+                                    <div *ngIf="activeTab === 'all'">
+                                        <i class="fas fa-search fa-3x mb-3"></i>
+                                        <h5>Investigation Starting</h5>
+                                        <p>The investigation will begin soon. Summary and messages will appear here.</p>
+                                    </div>
                                 </div>
 
                                 <!-- Regular chat messages first (in chronological order) -->
                                 <div *ngFor="let message of visibleMessages$ | async" class="message-card alert mb-2"
                                     [class.alert-primary]="message.message_type === 'user'"
                                     [class.alert-success]="message.message_type === 'agent'"
-                                    [class.alert-secondary]="message.message_type === 'system'"
+                                    [class.alert-secondary]="message.message_type === 'system' && !message.metadata?.['is_investigation_summary']"
                                     [class.alert-warning]="message.message_type === 'thinking'"
-                                    [class.alert-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'">
+                                    [class.alert-info]="message.message_type === 'tool_call' || message.message_type === 'tool_result'"
+                                    [class.alert-light]="message.metadata?.['is_investigation_summary']"
+                                    [class.border-warning]="message.metadata?.['is_investigation_summary']"
+                                    [class.border-3]="message.metadata?.['is_investigation_summary']">
 
-                                    <div class="d-flex align-items-start">
+                                    <!-- Special handling for Investigation Summary -->
+                                    <div *ngIf="message.metadata?.['is_investigation_summary']"
+                                        class="investigation-summary-message">
+                                        <div class="d-flex align-items-center mb-3">
+                                            <div class="me-3">
+                                                <i class="fas fa-lightbulb fa-2x text-warning"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <h5 class="mb-1 text-warning">
+                                                    <i class="fas fa-robot me-2"></i>
+                                                    Investigation Summary
+                                                </h5>
+                                                <small class="text-muted">AI-generated overview • {{
+                                                    formatTimestamp(message.timestamp) }}</small>
+                                            </div>
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="fas fa-star"></i> Key Insights
+                                            </span>
+                                        </div>
+                                        <div
+                                            class="summary-content p-3 bg-light rounded border-start border-warning border-3">
+                                            <ng-container
+                                                *ngIf="parseUiSummary(message.content) as parsedSummary; else rawMessageSummary">
+                                                <!-- Structured Summary Display for Chat Message -->
+                                                <div class="structured-summary">
+                                                    <!-- Action Summary Section -->
+                                                    <div class="action-summary mb-3">
+                                                        <h6 class="mb-2 d-flex align-items-center">
+                                                            <i [class]="getActionTypeIcon(parsedSummary.actionType)"
+                                                                [class]="getActionTypeColor(parsedSummary.actionType) + ' me-2'"></i>
+                                                            {{ parsedSummary.mainTheme }}
+                                                            <span class="badge ms-2"
+                                                                [class]="'bg-' + parsedSummary.actionType">
+                                                                {{ parsedSummary.actionType | titlecase }}
+                                                            </span>
+                                                        </h6>
+                                                        <p class="mb-2"><strong>Action:</strong> {{
+                                                            parsedSummary.actionTaken }}</p>
+                                                        <p class="mb-3">{{ parsedSummary.description }}</p>
+                                                    </div>
+
+                                                    <!-- Key Events Cards -->
+                                                    <div class="key-findings mb-3"
+                                                        *ngIf="parsedSummary.keyEvents?.length">
+                                                        <h6 class="mb-2">
+                                                            <i class="fas fa-list-check text-success me-1"></i>
+                                                            Key Events
+                                                        </h6>
+                                                        <div class="row g-2">
+                                                            <div class="col-md-6"
+                                                                *ngFor="let event of parsedSummary.keyEvents">
+                                                                <div
+                                                                    class="event-card p-2 bg-white rounded border d-flex align-items-center">
+                                                                    <i
+                                                                        class="fas fa-check-circle text-success me-2"></i>
+                                                                    <span class="small">{{ event }}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Next Steps Section -->
+                                                    <div *ngIf="parsedSummary.nextSteps && parsedSummary.nextSteps !== 'No specific next steps provided'"
+                                                        class="next-steps">
+                                                        <h6 class="mb-2">
+                                                            <i class="fas fa-arrow-circle-right text-primary me-1"></i>
+                                                            Recommended Next Steps
+                                                        </h6>
+                                                        <div class="p-2 bg-primary bg-opacity-10 rounded">
+                                                            <p class="mb-0">{{ parsedSummary.nextSteps }}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </ng-container>
+
+                                            <!-- Fallback: Raw Content Display -->
+                                            <ng-template #rawMessageSummary>
+                                                <div
+                                                    style="white-space: pre-wrap; line-height: 1.6; font-size: 1.05rem;">
+                                                    {{ message.content }}
+                                                </div>
+                                            </ng-template>
+                                        </div>
+                                    </div>
+
+                                    <!-- Regular message handling -->
+                                    <div *ngIf="!message.metadata?.['is_investigation_summary']"
+                                        class="d-flex align-items-start">
                                         <!-- Message Type Icon -->
                                         <div class="me-2">
                                             <i class="fas fa-lg" [class.fa-user]="message.message_type === 'user'"
@@ -192,72 +428,128 @@
                                                 </h6>
                                                 <small class="text-muted">{{ formatTimestamp(message.timestamp)
                                                     }}</small>
-                                            </div> <!-- Message Content -->
-                                            <div class="message-content"
-                                                style="white-space: pre-wrap; line-height: 1.5;">
-                                                {{ getDisplayContent(message) }}
                                             </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                            <!-- Message Content -->
+                                            <div class="message-content">
+                                                <!-- Structured Summary for Agent Messages -->
+                                                <ng-container *ngIf="hasStructuredMessageSummary(message)">
+                                                    <ng-container
+                                                        *ngIf="getParsedMessageSummary(message) as parsedSummary">
+                                                        <div class="compact-structured-summary p-3 bg-light rounded">
+                                                            <!-- Compact Header -->
+                                                            <div class="d-flex align-items-center mb-2">
+                                                                <i [class]="getActionTypeIcon(parsedSummary.actionType)"
+                                                                    [class]="getActionTypeColor(parsedSummary.actionType) + ' me-2'"></i>
+                                                                <strong>{{ parsedSummary.mainTheme }}</strong>
+                                                                <span class="badge ms-2 badge-sm"
+                                                                    [class]="'bg-' + parsedSummary.actionType">
+                                                                    {{ parsedSummary.actionType | titlecase }}
+                                                                </span>
+                                                            </div>
 
-                                <!-- Streaming Message (ChatGPT style) - Shows AFTER existing messages -->
-                                <div *ngIf="(isStreaming$ | async) && (streamingText$ | async)"
-                                    class="message-card alert alert-success mb-2">
-                                    <div class="d-flex align-items-start">
-                                        <!-- Agent Icon -->
-                                        <div class="me-2">
-                                            <i class="fas fa-robot fa-lg text-success"></i>
-                                        </div>
+                                                            <!-- Action Description -->
+                                                            <p class="mb-2">{{ parsedSummary.description }}</p>
 
-                                        <div class="flex-grow-1">
-                                            <!-- Message Header -->
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <h6 class="mb-0">
-                                                    <span class="badge bg-success me-2">Agent</span>
-                                                </h6>
-                                                <small class="text-muted">{{ streamingStartTimestamp ?
-                                                    formatTimestamp(streamingStartTimestamp) : 'responding...'
-                                                    }}</small>
-                                            </div>
+                                                            <!-- Key Events (compact) -->
+                                                            <div *ngIf="parsedSummary.keyEvents?.length"
+                                                                class="key-events mb-2">
+                                                                <div class="d-flex flex-wrap gap-1">
+                                                                    <span *ngFor="let event of parsedSummary.keyEvents"
+                                                                        class="badge bg-secondary text-wrap">
+                                                                        {{ event }}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
 
-                                            <!-- Streaming Content -->
-                                            <div class="message-content"
-                                                style="white-space: pre-wrap; line-height: 1.5;">
-                                                {{ streamingText$ | async }}
-                                                <!-- <span class="typing-cursor">|</span> -->
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                                                            <!-- Toggle to show full content -->
+                                                            <button class="btn btn-sm btn-outline-secondary"
+                                                                (click)="message.show_full_content = !message.show_full_content">
+                                                                <i class="fas"
+                                                                    [class.fa-expand]="!message.show_full_content"
+                                                                    [class.fa-compress]="message.show_full_content"></i>
+                                                                {{ message.show_full_content ? 'Show Summary' : 'Show
+                                                                Full Response' }}
+                                                            </button>
 
-                            <!-- Chat Input Box -->
-                            <div class="card-footer border-top bg-light p-3">
-                                <div class="d-flex gap-2">
-                                    <div class="flex-grow-1">
-                                        <div class="input-group">
-                                            <input type="text" class="form-control"
-                                                placeholder="Ask a question about this investigation..."
-                                                [(ngModel)]="chatInput" (keyup.enter)="sendChatMessage()"
-                                                [disabled]="isSendingMessage">
-                                            <button class="btn btn-primary" type="button" (click)="sendChatMessage()"
-                                                [disabled]="!chatInput.trim() || isSendingMessage">
-                                                <i class="fas fa-paper-plane" *ngIf="!isSendingMessage"></i>
-                                                <div class="spinner-border spinner-border-sm" role="status"
-                                                    *ngIf="isSendingMessage">
-                                                    <span class="visually-hidden">Sending...</span>
+                                                            <!-- Full content when expanded -->
+                                                            <div *ngIf="message.show_full_content"
+                                                                class="full-content mt-3 p-2 bg-white rounded border">
+                                                                <div
+                                                                    style="white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">
+                                                                    {{ message.content }}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </ng-container>
+                                                </ng-container>
+
+                                                <!-- Regular Content Display -->
+                                                <div *ngIf="!hasStructuredMessageSummary(message)"
+                                                    style="white-space: pre-wrap; line-height: 1.5;">
+                                                    {{ getDisplayContent(message) }}
                                                 </div>
-                                            </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <small class="text-muted mt-1 d-block">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    Ask questions about the investigation findings, request clarifications, or get
-                                    additional analysis.
-                                </small>
                             </div>
+
+                            <!-- Streaming Message (ChatGPT style) - Shows AFTER existing messages -->
+                            <div *ngIf="(isStreaming$ | async) && (streamingText$ | async)"
+                                class="message-card alert alert-success mb-2">
+                                <div class="d-flex align-items-start">
+                                    <!-- Agent Icon -->
+                                    <div class="me-2">
+                                        <i class="fas fa-robot fa-lg text-success"></i>
+                                    </div>
+
+                                    <div class="flex-grow-1">
+                                        <!-- Message Header -->
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <span class="badge bg-success me-2">Agent</span>
+                                            </h6>
+                                            <small class="text-muted">{{ streamingStartTimestamp ?
+                                                formatTimestamp(streamingStartTimestamp) : 'responding...'
+                                                }}</small>
+                                        </div>
+
+                                        <!-- Streaming Content -->
+                                        <div class="message-content" style="white-space: pre-wrap; line-height: 1.5;">
+                                            {{ streamingText$ | async }}
+                                            <!-- <span class="typing-cursor">|</span> -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chat Input Box -->
+                        <div class="card-footer border-top bg-light p-3">
+                            <div class="d-flex gap-2">
+                                <div class="flex-grow-1">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control"
+                                            placeholder="Ask a question about this investigation..."
+                                            [(ngModel)]="chatInput" (keyup.enter)="sendChatMessage()"
+                                            [disabled]="isSendingMessage">
+                                        <button class="btn btn-primary" type="button" (click)="sendChatMessage()"
+                                            [disabled]="!chatInput.trim() || isSendingMessage">
+                                            <i class="fas fa-paper-plane" *ngIf="!isSendingMessage"></i>
+                                            <div class="spinner-border spinner-border-sm" role="status"
+                                                *ngIf="isSendingMessage">
+                                                <span class="visually-hidden">Sending...</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <small class="text-muted mt-1 d-block">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Ask questions about the investigation findings, request clarifications, or get
+                                additional analysis.
+                            </small>
                         </div>
                     </div>
                 </div>
+            </div>

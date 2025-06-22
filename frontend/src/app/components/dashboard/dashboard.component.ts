@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { NgbModal, NgbModalModule, NgbDate, NgbCalendar, NgbDateParserFormatter, NgbDatepickerModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbModal, NgbModalModule, NgbDate, NgbCalendar, NgbDateParserFormatter, NgbDatepickerModule, NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 import { interval, Subscription, forkJoin, combineLatest, BehaviorSubject } from 'rxjs';
 import { takeUntil, switchMap, tap, catchError, finalize, take } from 'rxjs/operators';
 import { Subject, of } from 'rxjs';
@@ -51,7 +51,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     activeTab: 'investigations' | 'workorders' | 'projects' = 'investigations';
     isLoading = false;
     error: string | null = null;
-
+    defaultStartDate = new NgbDate(new Date().getFullYear(), 5, 1); // Default to May 1st of current year
     // Data arrays
     investigations: Investigation[] = [];
     projects: Project[] = [];
@@ -172,6 +172,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
         if (!this.newInvestigationForm.plant_id || !this.newInvestigationForm.start_date || !this.newInvestigationForm.end_date) {
             this.error = 'Please select a plant and date range';
+            return;
+        }
+
+        // Validate dates are in May
+        if (this.newInvestigationForm.start_date.month !== 5 || this.newInvestigationForm.end_date.month !== 5) {
+            this.error = 'Only dates in May are allowed';
             return;
         }
 
@@ -604,6 +610,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     onDateChange() {
         // Auto-validate date range when dates change
         if (this.newInvestigationForm.start_date && this.newInvestigationForm.end_date) {
+            // Check if dates are in May
+            if (this.newInvestigationForm.start_date.month !== 5 || this.newInvestigationForm.end_date.month !== 5) {
+                this.error = 'Only dates in May are allowed';
+                return;
+            }
+
             const daysDiff = this.calculateDaysBetween(
                 this.newInvestigationForm.start_date,
                 this.newInvestigationForm.end_date
@@ -616,6 +628,40 @@ export class DashboardComponent implements OnInit, OnDestroy {
             } else {
                 this.error = null;
             }
+        } else if (this.newInvestigationForm.start_date && this.newInvestigationForm.start_date.month !== 5) {
+            this.error = 'Only dates in May are allowed';
+        } else if (this.newInvestigationForm.end_date && this.newInvestigationForm.end_date.month !== 5) {
+            this.error = 'Only dates in May are allowed';
         }
+    }
+
+    // Date filter to restrict to May only
+    isDateDisabled = (date: NgbDateStruct): boolean => {
+        return date.month !== 5; // Only allow May (month 5)
+    };
+
+    // Mark dates outside May as disabled in the calendar
+    markDisabled = (date: NgbDateStruct): boolean => {
+        return this.isDateDisabled(date);
+    };
+
+    // Get default May date for navigation
+    getDefaultMayDate(): NgbDate {
+        const currentYear = new Date().getFullYear();
+        return new NgbDate(currentYear, 5, 1); // May 1st of current year
+    }
+
+    // Open start date picker and navigate to May
+    openStartDatePicker(datePicker: any): void {
+        const mayDate = this.getDefaultMayDate();
+        datePicker.navigateTo(mayDate);
+        datePicker.open();
+    }
+
+    // Open end date picker and navigate to May
+    openEndDatePicker(datePicker: any): void {
+        const mayDate = this.getDefaultMayDate();
+        datePicker.navigateTo(mayDate);
+        datePicker.open();
     }
 }
