@@ -44,12 +44,24 @@ class Settings(BaseSettings):
     # Database Configuration for ADK DatabaseSessionService
     database_url: str = Field(
         default="postgresql://adk_user:my-password@localhost:9432/adk_db",
-        description="Database URL for ADK session storage (SQLite for dev, PostgreSQL for prod)",
+        description="Database URL for ADK session storage",
     )
     database_echo: bool = Field(default=False, description="Enable SQLAlchemy echo")
+
+    # Environment detection
+    environment: str = Field(
+        default="development", description="Environment (development, production)"
+    )
+
+    # Google AI Configuration
     gemini_api_key: Optional[str] = Field(
         default=None, description="Google Gemini API key"
     )
+
+    # ADK Configuration
+    adk_model_name: str = Field(default="gemini-1.5-pro", description="ADK model name")
+    adk_temperature: float = Field(default=0.1, description="ADK temperature")
+    adk_max_tokens: int = Field(default=8192, description="ADK max tokens")
     # Redis Configuration (optional)
     # redis_url: Optional[str] = Field(
     #     default="redis://localhost:6379",
@@ -82,6 +94,13 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Override database URL for Docker container environment
+        docker_db_url = os.getenv("DATABASE_URL")
+        if docker_db_url:
+            self.database_url = docker_db_url
 
 
 # Global settings instance
