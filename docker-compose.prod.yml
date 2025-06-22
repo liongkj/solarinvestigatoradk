@@ -54,8 +54,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
     container_name: solar_frontend_prod
-    ports:
-      - "80:80"
+    # No ports exposed - only accessible through nginx reverse proxy
     environment:
       - BACKEND_URL=http://backend:8000
       - API_URL=http://backend:8000/api
