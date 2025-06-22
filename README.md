@@ -1,108 +1,137 @@
-# Gemini Fullstack LangGraph Quickstart
+# SolarWarden: AI Copilot for Solar Farm Operations
 
-This project demonstrates a fullstack application using a React frontend and a LangGraph-powered backend agent. The agent is designed to perform comprehensive research on a user's query by dynamically generating search terms, querying the web using Google Search, reflecting on the results to identify knowledge gaps, and iteratively refining its search until it can provide a well-supported answer with citations. This application serves as an example of building research-augmented conversational AI using LangGraph and Google's Gemini models.
+SolarWarden is a data-driven copilot for solar farm operators — pinpointing low-performing inverters, running on-demand investigations, and involving humans only when field checks are needed. Powered by Google's Agent Development Kit (ADK) and Gemini LLM, SolarWarden automates root-cause analysis and streamlines solar O&M workflows.
 
-![Gemini Fullstack LangGraph](./app.png)
+![SolarWarden Dashboard](./app.png)
 
-## Features
+---
 
-- 💬 Fullstack application with a React frontend and LangGraph backend.
-- 🧠 Powered by a LangGraph agent for advanced research and conversational AI.
-- 🔍 Dynamic search query generation using Google Gemini models.
-- 🌐 Integrated web research via Google Search API.
-- 🤔 Reflective reasoning to identify knowledge gaps and refine searches.
-- 📄 Generates answers with citations from gathered sources.
-- 🔄 Hot-reloading for both frontend and backend development during development.
+## 🚀 Features
 
-## Project Structure
+- **AI-Powered Investigations:** Multi-agent system analyzes plant, inverter, and alarm data to detect and explain performance drops.
+- **Real-Time Insights:** Live streaming of investigation results and recommendations.
+- **Workorder Automation:** Instantly generate and track maintenance workorders from investigation findings.
+- **Modern Dashboard:** Angular-based UI for managing investigations, workorders, and projects.
+- **Cloud-Ready:** Integrates with Google Cloud and Vertex AI for scalable, enterprise-grade performance.
 
-The project is divided into two main directories:
+---
 
--   `frontend/`: Contains the React application built with Vite.
--   `backend/`: Contains the LangGraph/FastAPI application, including the research agent logic.
+## 🛠️ Tech Stack
 
-## Getting Started: Development and Local Testing
+| Layer      | Technology/Tool         | Purpose                                      |
+|------------|------------------------|----------------------------------------------|
+| Frontend   | Angular, TypeScript    | User interface, dashboard, investigation UI  |
+| Styling    | Bootstrap              | UI styling                                   |
+| Backend    | FastAPI, Python        | API, business logic, agent orchestration     |
+| AI/Agents  | Google ADK, Gemini     | Multi-agent investigation, LLM analysis      |
+| Streaming  | SSE                    | Real-time updates to frontend                |
+| Cloud      | Google Cloud (optional)| Advanced AI/LLM and data integration         |
 
-Follow these steps to get the application running locally for development and testing.
+### 📊 Tech Stack Diagram
 
-**1. Prerequisites:**
+![Tech Stack Diagram](./assets/tech_stack.png)
 
--   Node.js and npm (or yarn/pnpm)
--   Python 3.8+
--   **`GEMINI_API_KEY`**: The backend agent requires a Google Gemini API key.
-    1.  Navigate to the `backend/` directory.
-    2.  Create a file named `.env` by copying the `backend/.env.example` file.
-    3.  Open the `.env` file and add your Gemini API key: `GEMINI_API_KEY="YOUR_ACTUAL_API_KEY"`
+---
 
-**2. Install Dependencies:**
+## 🏗️ Google ADK Architecture
 
-**Backend:**
+The following diagram illustrates the architecture of the Google Agent Development Kit (ADK) as used in this project:
+
+![Google ADK Architecture](./assets/adk_architecture.png)
+
+---
+
+## 📦 Project Structure
+
+```
+solarinvestigatoradk/
+├── backend/
+│   ├── src/adk/           # ADK agents, tools, services, models
+│   └── main.py            # FastAPI entry point
+├── frontend/
+│   ├── src/app/           # Angular components, services, models
+│   └── ...                # Angular config and assets
+├── docker-compose.yml     # Multi-service orchestration
+├── Dockerfile             # Container build for backend/frontend
+└── README.md              # This file
+```
+
+---
+
+## ⚡ Getting Started
+
+### Prerequisites
+
+- Python 3.9+
+- Node.js & npm
+- Docker
+- Google Cloud credentials (for advanced AI features)
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/liongkj/solarinvestigatoradk.git
+cd solarinvestigatoradk
+```
+
+### 2. Backend Setup
 
 ```bash
 cd backend
-pip install .
+uv sync
+cp .env.example .env
+# Edit .env with your Google Cloud and Gemini API keys
+uv run python src/main.py
 ```
 
-**Frontend:**
+### 3. Frontend Setup
 
 ```bash
-cd frontend
+cd ../frontend
 npm install
+ng serve
+# Visit http://localhost:4200/
 ```
 
-**3. Run Development Servers:**
-
-**Backend & Frontend:**
+### 4. Docker Setup
 
 ```bash
-make dev
+docker-compose up --build
 ```
-This will run the backend and frontend development servers.    Open your browser and navigate to the frontend development server URL (e.g., `http://localhost:5173/app`).
 
-_Alternatively, you can run the backend and frontend development servers separately. For the backend, open a terminal in the `backend/` directory and run `langgraph dev`. The backend API will be available at `http://127.0.0.1:2024`. It will also open a browser window to the LangGraph UI. For the frontend, open a terminal in the `frontend/` directory and run `npm run dev`. The frontend will be available at `http://localhost:5173`._
+---
 
-## How the Backend Agent Works (High-Level)
+## 🧠 How It Works
 
-The core of the backend is a LangGraph agent defined in `backend/src/agent/graph.py`. It follows these steps:
+1. **Start an Investigation:** Select a plant and date range in the dashboard.
+2. **AI Agents Analyze Data:** Specialized agents (PR, inverter, alarm, timeseries) run in sequence/parallel to diagnose issues.
+3. **Get Actionable Results:** Receive a clear summary of root causes, affected devices, and recommended actions.
 
-![Agent Flow](./agent.png)
 
-1.  **Generate Initial Queries:** Based on your input, it generates a set of initial search queries using a Gemini model.
-2.  **Web Research:** For each query, it uses the Gemini model with the Google Search API to find relevant web pages.
-3.  **Reflection & Knowledge Gap Analysis:** The agent analyzes the search results to determine if the information is sufficient or if there are knowledge gaps. It uses a Gemini model for this reflection process.
-4.  **Iterative Refinement:** If gaps are found or the information is insufficient, it generates follow-up queries and repeats the web research and reflection steps (up to a configured maximum number of loops).
-5.  **Finalize Answer:** Once the research is deemed sufficient, the agent synthesizes the gathered information into a coherent answer, including citations from the web sources, using a Gemini model.
+---
 
-## Deployment
+## 📊 Demo
 
-In production, the backend server serves the optimized static frontend build. LangGraph requires a Redis instance and a Postgres database. Redis is used as a pub-sub broker to enable streaming real time output from background runs. Postgres is used to store assistants, threads, runs, persist thread state and long term memory, and to manage the state of the background task queue with 'exactly once' semantics. For more details on how to deploy the backend server, take a look at the [LangGraph Documentation](https://langchain-ai.github.io/langgraph/concepts/deployment_options/). Below is an example of how to build a Docker image that includes the optimized frontend build and the backend server and run it via `docker-compose`.
+1. **Dashboard:** View all investigations, workorders, and projects.
+2. **Start Investigation:** Launch a new investigation with a few clicks.
+3. **Review Results:** See detailed findings, summaries, and next steps.
+4. **Workorder Management:** Create and track workorders directly from investigation results.
 
-_Note: For the docker-compose.yml example you need a LangSmith API key, you can get one from [LangSmith](https://smith.langchain.com/settings)._
+---
 
-_Note: If you are not running the docker-compose.yml example or exposing the backend server to the public internet, you update the `apiUrl` in the `frontend/src/App.tsx` file your host. Currently the `apiUrl` is set to `http://localhost:8123` for docker-compose or `http://localhost:2024` for development._
+## 📝 License
 
-**1. Build the Docker Image:**
+Apache License 2.0
 
-   Run the following command from the **project root directory**:
-   ```bash
-   docker build -t gemini-fullstack-langgraph -f Dockerfile .
-   ```
-**2. Run the Production Server:**
+---
 
-   ```bash
-   GEMINI_API_KEY=<your_gemini_api_key> LANGSMITH_API_KEY=<your_langsmith_api_key> docker-compose up
-   ```
+## 🙌 Acknowledgements
 
-Open your browser and navigate to `http://localhost:8123/app/` to see the application. The API will be available at `http://localhost:8123`.
+- Google Agent Development Kit (ADK)
+- Google Gemini LLM
+- Vertex AI
+- Angular & FastAPI communities
 
-## Technologies Used
+---
 
-- [React](https://reactjs.org/) (with [Vite](https://vitejs.dev/)) - For the frontend user interface.
-- [Tailwind CSS](https://tailwindcss.com/) - For styling.
-- [Shadcn UI](https://ui.shadcn.com/) - For components.
-- [LangGraph](https://github.com/langchain-ai/langgraph) - For building the backend research agent.
-- [Google Gemini](https://ai.google.dev/models/gemini) - LLM for query generation, reflection, and answer synthesis.
-
-## License
-
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details. 
+**SolarWarden — Smarter, faster, and more cost-effective solar farm operations.**
