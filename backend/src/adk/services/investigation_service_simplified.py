@@ -204,8 +204,9 @@ class SimplifiedInvestigationService:
             "daily_pr_agent_output": None,
             "problematic_detailed_inverter_performance": [],
             "problematic_five_minutes_pr": [],
+            "filtered_plant_timeseries_df": None,
+            "final_comprehensive_report": None
         }
-        # TODO: TO be retrieved using context.state later
 
         # Create ADK session (this handles all storage automatically)
         await self.session_service.create_session(

@@ -37,33 +37,6 @@ from adk.problem_finder.toolbox import toolbox
 fullset_tools = toolbox.load_toolset()
 tools = [fullset_tools[1],fullset_tools[4],fullset_tools[6],fullset_tools[7]]
 
-
-# response = tool(
-#     plant_id="6b855460-e815-11ec-9d0d-5faa5f7f8fb1",
-#     start_date="2025-05-29",
-#     end_date="2025-05-29"
-# )
-
-# print(response)
-
-# async def get_alarms(
-#         question: str,
-#         tool_context: ToolContext
-# ):
-#     """
-#     Parameters:
-#     - plant_id
-#     """
-#     agent_tool = AgentTool(agent=Retriever)
-
-#     retriever_agent_output = await agent_tool.run_async(
-#         args={"request":question}, 
-#         tool_context=tool_context,
-#     )
-    
-#     # tool_context.state["retriever_agent_output"] = retriever_agent_output
-#     return retriever_agent_output
-
 """
 Tool for retrieving device model for `list_corpora`
 """
@@ -189,7 +162,3 @@ def list_corpora(device_model: str, tool_context: ToolContext) -> dict:
             "corpus_name": [],
         }
     
-# def get_plant_id(plant_name: str) -> dict:
-#     """
-#     Tool for retrieving the plant name
-#     """

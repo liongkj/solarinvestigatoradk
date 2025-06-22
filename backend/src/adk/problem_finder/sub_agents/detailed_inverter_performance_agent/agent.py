@@ -1,11 +1,9 @@
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
 from adk.problem_finder.toolbox import tools
-# from solar_investigator.tools import tools
-
 from .prompts import return_instruction_detailed_inverter_performance
 from .tools import append_problematic_rows
-
+from adk.callbacks import summarize_agent_output_callback
 
 def setup(callback_context: CallbackContext):
     if "problematic_detailed_inverter_performance" not in callback_context.state:
@@ -22,4 +20,6 @@ detailed_inverter_performance_agent = Agent(
     tools=[tools[7],append_problematic_rows],
     before_agent_callback=setup,
     output_key="detailed_inverter_performance_agent_output",
+    after_agent_callback=summarize_agent_output_callback,
+
 )
