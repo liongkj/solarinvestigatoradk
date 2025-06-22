@@ -150,7 +150,13 @@ def _run_summarizer_agent(agent_name: str, agent_output: str) -> AgentActionSumm
         if final_response_text.strip():
             try:
                 # Try to parse the JSON response
-                summary_data = json.loads(final_response_text.strip())
+                # Check if the response is within a JSON code block
+                response_text = final_response_text.strip()
+                if response_text.startswith("```json") and response_text.endswith(
+                    "```"
+                ):
+                    response_text = response_text[7:-3].strip()
+                summary_data = json.loads(response_text.strip())
                 summary = AgentActionSummary(**summary_data)
                 return summary
             except (json.JSONDecodeError, TypeError) as e:
