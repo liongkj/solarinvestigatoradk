@@ -1,0 +1,20 @@
+services:
+  # Development overrides for backend
+  backend:
+    command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://adk_user:my-password@adk_db:5432/adk_db
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app/src
+
+  # Development overrides for frontend
+  frontend:
+    command: npm start -- --host 0.0.0.0 --port 4200 --poll=2000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - NODE_OPTIONS=--max-old-space-size=4096

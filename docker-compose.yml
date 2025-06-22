@@ -34,6 +34,37 @@ services:
     #   retries: 5
     #   interval: 5s
 
+  # FastAPI Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: solar_backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      adk_db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://adk_user:my-password@adk_db:5432/adk_db
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend:/app
+    command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Angular Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: solar_frontend
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm start -- --host 0.0.0.0 --port 4200
+
   # Legacy LangGraph services (keep for reference)
   # langgraph-postgres:
   #   image: postgres:16
