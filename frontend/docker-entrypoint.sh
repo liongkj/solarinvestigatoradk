@@ -10,8 +10,8 @@ API_URL=${API_URL:-http://localhost:8000/api}
 echo "BACKEND_URL: $BACKEND_URL"
 echo "API_URL: $API_URL"
 
-# Generate the env.js file with actual environment variables
-cat > /app/src/assets/env.js << EOF
+# Generate the env.js file with actual environment variables in the nginx html directory
+cat > /usr/share/nginx/html/assets/env.js << EOF
 // This script will be loaded before the main application
 // Generated at container startup with actual environment variables
 (function(window) {

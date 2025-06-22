@@ -7,9 +7,11 @@ services:
   adk_db:
     image: postgres:17
     container_name: adk_db_prod
+    env_file:
+      - .env.docker
     environment:
       POSTGRES_USER: adk_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-my-secure-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-my-password}
       POSTGRES_DB: adk_db
     volumes:
       - timeseries_data:/var/lib/postgresql/data
@@ -28,12 +30,16 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     container_name: solar_backend_prod
+    ports:
+      - "8000:8000"  # Expose backend port for debugging
     depends_on:
       adk_db:
         condition: service_healthy
+    env_file:
+      - .env.docker
     environment:
-      - DATABASE_URL=postgresql://adk_user:${POSTGRES_PASSWORD:-my-secure-password}@adk_db:5432/adk_db
-      - CORS_ORIGINS=["https://yourdomain.com", "http://frontend"]
+      - DATABASE_URL=postgresql://adk_user:${POSTGRES_PASSWORD:-my-password}@adk_db:5432/adk_db
+      - CORS_ORIGINS=["https://yourdomain.com", "http://frontend", "http://localhost"]
       - CORS_ALLOW_CREDENTIALS=true
       - CORS_ALLOW_METHODS=["GET", "POST", "PUT", "DELETE"]
       - CORS_ALLOW_HEADERS=["*"]
@@ -57,8 +63,8 @@ services:
     ports:
       - "80:80"
     environment:
-      - BACKEND_URL=http://backend:8000
-      - API_URL=http://backend:8000/api
+      - BACKEND_URL=http://localhost:8000
+      - API_URL=http://localhost:8000/api
     depends_on:
       - backend
     restart: unless-stopped
