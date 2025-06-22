@@ -43,7 +43,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -54,28 +54,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
     container_name: solar_frontend_prod
-    # No ports exposed - only accessible through nginx reverse proxy
+    ports:
+      - "80:80"
     environment:
       - BACKEND_URL=http://backend:8000
       - API_URL=http://backend:8000/api
     depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  # Reverse proxy (optional but recommended for production)
-  nginx:
-    image: nginx:alpine
-    container_name: nginx_proxy
-    ports:
-      - "443:443"
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - frontend
       - backend
     restart: unless-stopped
     networks:
