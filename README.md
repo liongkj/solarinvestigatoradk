@@ -2,7 +2,7 @@
 
 SolarWarden is a data-driven copilot for solar farm operators — pinpointing low-performing inverters, running on-demand investigations, and involving humans only when field checks are needed. Powered by Google's Agent Development Kit (ADK) and Gemini LLM, SolarWarden automates root-cause analysis and streamlines solar O&M workflows.
 
-![SolarWarden Dashboard](./app.png)
+![SolarWarden Dashboard](./assets/app.png)
 
 ---
 
