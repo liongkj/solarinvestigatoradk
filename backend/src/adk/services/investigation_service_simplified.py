@@ -300,15 +300,6 @@ class SimplifiedInvestigationService:
             # Update status to running
             await self._update_status(investigation.id, InvestigationStatus.RUNNING)
 
-            # Create agent with after_agent_callback for UI processing
-            # AND workorder agent as sub-agent
-            # agent = create_root_agent(
-            #     investigation=investigation,
-            #     # output_key="investigation_result",  # ADK will auto-save to state
-            #     # after_agent_callback=self._create_ui_summary_callback(investigation.id),
-            #     # # TODO: Add workorder agent when implemented later
-            #     # # workorder_agent=get_workorder_agent(),
-            # )  # swap to out agent
 
             agent = root_agent
 
@@ -1306,27 +1297,59 @@ class SimplifiedInvestigationService:
             if not investigation:
                 return "Investigation not found."
 
+            def create_workorder_prompt(investigation) -> str:
+                """Create prompt for workorder agent"""
+                return f"""
+                You are a specialized agent for creating workorders based on a solar plant issue investigations report or evidence.
+                                
+                Findings from investigation:
+                {investigation.final_comprehensive_report or "No findings yet. The investigation is still ongoing."}
+                
+                if there is no evidence, just return a empty list.
+                """
+
             workorder_agent =  Agent(
                 name="workorder_agent",
                 model="gemini-2.5-flash-preview-05-20",
-                instruction="""You are a specialized agent for creating workorders related to solar plant investigations.""",
+                instruction=create_workorder_prompt(investigation),
                 description="Help users to create workorders based on investigation results",
                 output_key="workorder_agent_output",
                 # after_agent_callback=summarize_agent_output_callback,
                 generate_content_config=types.GenerateContentConfig(temperature=0.1),
                 # tools=[tools[5], tools[6], store_inverter_device_id_and_capacity_peak],
             )
-
+ 
             # Create a dedicated runner for workorder agent
+            session_id = self._get_session_id(investigation_id)
             wo_runner_key = f"{investigation_id}_workorder"
-            runner = self.active_runners.get(wo_runner_key)
-            # if not runner:
-            #     runner = create_agent_runner(workorder_agent)
-            #     self.active_runners[wo_runner_key] = runner
+            runner = Runner(
+                agent=workorder_agent,
+                app_name=self.app_name,
+                session_service=self.session_service,
+            )
+            
+            accumulated_text = ""
+            final_response = None
+            self.active_runners[wo_runner_key] = runner
+            
+            user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
+            async for event in runner.run_async(
+                user_id=self.default_user_id,
+                session_id=session_id,
+                new_message=user_content,
+            ):
+            # Handle streaming events for real-time updates
+                current_text = await self._handle_streaming_event(
+                    investigation_id, event, accumulated_text
+                )
+                if current_text is not None:
+                    accumulated_text = current_text
 
-            # Pass user message to the workorder agent
-            # response = await runner.invoke(user_message)
-            response = None
+                if event.is_final_response() and event.content and event.content.parts:
+                    final_response = event.content.parts[0].text or ""
+
+            logger.info(f"Q&A response generated for investigation {investigation_id}")
+            return final_response or "I couldn't generate a response. Please try rephrasing your question."
             return "response"
 
         except Exception as e:
