@@ -7,6 +7,7 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, cast
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
+from google.adk.agents import Agent
 from google.genai import types
 from adk.problem_finder.agent import root_agent
 from google.adk.events import Event, EventActions
@@ -53,10 +54,6 @@ class SimplifiedInvestigationService:
 
         # Event queues for SSE streaming
         self.event_queues: Dict[str, asyncio.Queue] = {}
-
-        logger.info(
-            f"Initialized SimplifiedInvestigationService with ADK: {settings.database_url}"
-        )
 
     def _get_session_id(self, investigation_id: str) -> str:
         """Generate session ID for investigation"""
@@ -263,6 +260,8 @@ class SimplifiedInvestigationService:
                 result=state.get("result"),
                 error_message=state.get("error_message"),
                 plant_name=state.get("plant_name", "Unknown Plant"),
+                final_comprehensive_report=state.get("final_comprehensive_report"),
+                
             )
 
             return investigation
@@ -900,46 +899,75 @@ class SimplifiedInvestigationService:
     async def continue_investigation(
         self, investigation_id: str, user_message: str
     ) -> str:
-        """Continue investigation with user input. Not implemented yet"""
-        runner = self.active_runners.get(investigation_id)
+        """Continue investigation with user input - for Q&A and follow-up questions"""
+        try:
+            # Get investigation context
+            investigation = await self.get_investigation(investigation_id)
+            if not investigation:
+                return "Investigation not found."
 
-        if not runner:
-            # Recreate runner if needed
-            agent = root_agent
-            runner = Runner(
-                agent=agent,
-                app_name=self.app_name,
-                session_service=self.session_service,
+            # Create a simple chat agent for Q&A rather than using the main investigation agent
+            chat_agent = Agent(
+                name="investigation_qa_assistant",
+                model="gemini-2.0-flash",
+                instruction=f"""You are a helpful assistant that can answer questions about an ongoing solar plant investigation.
+                
+                Investigation Context:
+                - Investigation ID: {investigation_id}
+                - Plant ID: {investigation.plant_id}
+                - Analysis Period: {investigation.start_date} to {investigation.end_date}
+                - Status: {investigation.status.value}
+                
+                You can help users understand the investigation results, clarify findings, and answer follow-up questions.
+                Keep your responses concise and helpful. If you need more specific data, ask the user to be more specific.
+
+                Findings from investigation:
+                {investigation.final_comprehensive_report or "No findings yet. The investigation is still ongoing."}
+                """,
+                description="Assistant for answering questions about solar plant investigations",
+                tools=[]  # No tools needed for basic Q&A
             )
-            self.active_runners[investigation_id] = runner
 
-        # Send user message
-        session_id = self._get_session_id(investigation_id)
-        user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
+            # Create a dedicated runner for Q&A (separate from investigation runner)
+            qa_runner_key = f"{investigation_id}_qa"
+            runner = self.active_runners.get(qa_runner_key)
 
-        # No special RunConfig needed for text streaming - handle events naturally
-        final_response = ""
-        accumulated_text = ""
+            if not runner:
+                runner = Runner(
+                    agent=chat_agent,
+                    app_name=self.app_name,
+                    session_service=self.session_service,
+                )
+                self.active_runners[qa_runner_key] = runner
 
-        async for event in runner.run_async(
-            user_id=self.default_user_id,
-            session_id=session_id,
-            new_message=user_content,
-        ):
-            # Check for workorder agent requests
-            await self._handle_sub_agent_requests(investigation_id, event)
+            # Use a separate session for Q&A to avoid interfering with main investigation
+            # qa_session_id = f"{self._get_session_id(investigation_id)}_qa"
+            user_content = types.Content(role="user", parts=[types.Part(text=user_message)])
 
-            # Handle streaming events for real-time updates with text accumulation
-            current_text = await self._handle_streaming_event(
-                investigation_id, event, accumulated_text
-            )
-            if current_text is not None:
-                accumulated_text = current_text
+            final_response = ""
+            accumulated_text = ""
 
-            if event.is_final_response() and event.content and event.content.parts:
-                final_response = event.content.parts[0].text or ""
+            async for event in runner.run_async(
+                user_id=self.default_user_id,
+                session_id=self._get_session_id(investigation_id),
+                new_message=user_content,
+            ):
+                # Handle streaming events for real-time updates
+                current_text = await self._handle_streaming_event(
+                    investigation_id, event, accumulated_text
+                )
+                if current_text is not None:
+                    accumulated_text = current_text
 
-        return final_response or ""
+                if event.is_final_response() and event.content and event.content.parts:
+                    final_response = event.content.parts[0].text or ""
+
+            logger.info(f"Q&A response generated for investigation {investigation_id}")
+            return final_response or "I couldn't generate a response. Please try rephrasing your question."
+
+        except Exception as e:
+            logger.error(f"Error in continue_investigation Q&A: {e}")
+            return f"Sorry, I encountered an error while processing your question: {str(e)}"
 
     async def handle_decision(
         self, investigation_id: str, decision: str, decision_type: str = "continue"

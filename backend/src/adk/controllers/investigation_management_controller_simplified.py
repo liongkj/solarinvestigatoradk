@@ -192,8 +192,12 @@ async def post_message(
 ):
     """Post a message to the investigation chat"""
     try:
-        await service.continue_investigation(investigation_id, message["content"])
-        
+        # check if there is @workorder, if there is redirect to workorder agent
+        if "@workorder-agent" in message["content"]:
+            await service.redirect_to_workorder_agent(investigation_id, message["content"])
+        else:
+            await service.continue_investigation(investigation_id, message["content"])
+
     except HTTPException:
         raise
     except Exception as e:
@@ -262,68 +266,3 @@ async def stream_investigation_events(
         )
         raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@router.post("/{investigation_id}/workorders")
-async def create_workorder_manually(
-    investigation_id: str,
-    workorder_request: dict,  # {"description": "Work order details"}
-    service: SimplifiedInvestigationService = Depends(
-        get_simplified_investigation_service
-    ),
-):
-    """Create a workorder manually for an investigation"""
-    try:
-        # Check if investigation exists
-        investigation = await service.get_investigation(investigation_id)
-        if not investigation:
-            raise HTTPException(status_code=404, detail="Investigation not found")
-
-        description = workorder_request.get("description", "")
-        if not description:
-            raise HTTPException(
-                status_code=400, detail="Workorder description is required"
-            )
-
-        # Create workorder
-        result = await service.create_workorder_manually(investigation_id, description)
-
-        return {
-            "message": "Workorder created successfully",
-            "result": result,
-            "investigation_id": investigation_id,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            f"Error creating workorder for investigation {investigation_id}: {e}"
-        )
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.get("/{investigation_id}/workorders")
-async def get_investigation_workorders(
-    investigation_id: str,
-    service: SimplifiedInvestigationService = Depends(
-        get_simplified_investigation_service
-    ),
-):
-    """Get all workorders for an investigation"""
-    try:
-        # Check if investigation exists
-        investigation = await service.get_investigation(investigation_id)
-        if not investigation:
-            raise HTTPException(status_code=404, detail="Investigation not found")
-
-        workorders = await service.get_workorders(investigation_id)
-
-        return {"investigation_id": investigation_id, "workorders": workorders}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            f"Error getting workorders for investigation {investigation_id}: {e}"
-        )
-        raise HTTPException(status_code=500, detail="Internal server error")
