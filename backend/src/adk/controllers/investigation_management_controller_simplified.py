@@ -81,31 +81,31 @@ async def get_investigation(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/{investigation_id}/continue")
-async def continue_investigation(
-    investigation_id: str,
-    message: dict,  # {"message": "user message"}
-    service: SimplifiedInvestigationService = Depends(
-        get_simplified_investigation_service
-    ),
-):
-    """Continue investigation with user input"""
-    try:
-        investigation = await service.get_investigation(investigation_id)
-        if not investigation:
-            raise HTTPException(status_code=404, detail="Investigation not found")
+# @router.post("/{investigation_id}/continue")
+# async def continue_investigation(
+#     investigation_id: str,
+#     message: dict,  # {"message": "user message"}
+#     service: SimplifiedInvestigationService = Depends(
+#         get_simplified_investigation_service
+#     ),
+# ):
+#     """Continue investigation with user input"""
+#     try:
+#         investigation = await service.get_investigation(investigation_id)
+#         if not investigation:
+#             raise HTTPException(status_code=404, detail="Investigation not found")
 
-        user_message = message.get("message", "")
-        if not user_message:
-            raise HTTPException(status_code=400, detail="Message is required")
+#         user_message = message.get("message", "")
+#         if not user_message:
+#             raise HTTPException(status_code=400, detail="Message is required")
 
-        response = await service.continue_investigation(investigation_id, user_message)
-        return {"response": response}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error continuing investigation {investigation_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+#         response = await service.continue_investigation(investigation_id, user_message)
+#         return {"response": response}
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         logger.error(f"Error continuing investigation {investigation_id}: {e}")
+#         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{investigation_id}/chat", response_model=List[AgentMessage])
@@ -182,6 +182,23 @@ async def update_investigation_status(
         logger.error(f"Error updating investigation status {investigation_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.post("/{investigation_id}/message")
+async def post_message(
+    investigation_id: str,
+    message: dict,  # {"message": "user message"}
+    service: SimplifiedInvestigationService = Depends(
+        get_simplified_investigation_service
+    ),
+):
+    """Post a message to the investigation chat"""
+    try:
+        await service.continue_investigation(investigation_id, message["content"])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error posting message for investigation {investigation_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{investigation_id}/stream")
 async def stream_investigation_events(

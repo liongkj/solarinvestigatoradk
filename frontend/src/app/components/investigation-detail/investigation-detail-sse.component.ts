@@ -66,7 +66,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     public readonly showAllThoughts$ = this.showAllThoughtsSubject.asObservable();
 
     // Tab management for investigation views - using reactive streams
-    private activeTabSubject = new BehaviorSubject<'messages' | 'summary' | 'all'>('summary');
+    private activeTabSubject = new BehaviorSubject<'messages' | 'summary'>('summary');
     public readonly activeTab$ = this.activeTabSubject.asObservable();
 
     // Public observables for template consumption - use asObservable() to prevent external modification
@@ -160,41 +160,61 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             })));
 
             // Add investigation summary as first message if available (only for 'all' tab now)
-            if (activeTab === 'all') {
-                const summaryMessage = this.createInvestigationSummaryMessage();
-                if (summaryMessage) {
-                    allMessages = [summaryMessage, ...allMessages];
-                }
-            }
+            // if (activeTab === 'all') {
+            //     const summaryMessage = this.createInvestigationSummaryMessage();
+            //     if (summaryMessage) {
+            //         allMessages = [summaryMessage, ...allMessages];
+            //     }
+            // }
 
-            // For 'all' tab, we need to duplicate messages: one for full content, one for summary
-            if (activeTab === 'all') {
-                const expandedMessages: AgentMessage[] = [];
-                allMessages.forEach(msg => {
-                    // Add the full message first
-                    expandedMessages.push({
-                        ...msg,
-                        metadata: {
-                            ...msg.metadata,
-                            display_mode: 'full_content'
-                        }
-                    });
+            // // For 'all' tab, combine messages from both 'messages' and 'summary' tabs
+            // if (activeTab === 'all') {
+            //     // Get regular messages (same as messages tab)
+            //     const regularMessages = [...allMessages];
 
-                    // If it has a structured summary, add the summary version
-                    if (msg.message_type === 'agent' && msg.metadata?.['ui_summary'] && !msg.metadata?.['is_investigation_summary']) {
-                        expandedMessages.push({
-                            ...msg,
-                            id: `${msg.id}-summary`,
-                            metadata: {
-                                ...msg.metadata,
-                                display_mode: 'summary_only',
-                                sequence: (msg.metadata?.['sequence'] || 0) + 0.5 // Place summary right after the full message
-                            }
-                        });
-                    }
-                });
-                allMessages = expandedMessages;
-            }
+            //     // Get summary messages (same as summary tab logic)
+            //     const summaryMessages: AgentMessage[] = [];
+            //     if (this.investigation?.ui_summary && Array.isArray(this.investigation.ui_summary)) {
+            //         this.investigation.ui_summary.forEach((summaryEntry, index) => {
+            //             // Handle both parsed objects and raw strings (same logic as Summary tab)
+            //             let summary, fullContent, timestamp;
+
+            //             if (typeof summaryEntry === 'object' && summaryEntry !== null) {
+            //                 summary = summaryEntry.summary || JSON.stringify(summaryEntry);
+            //                 fullContent = summaryEntry.full_content || summaryEntry.summary;
+            //                 timestamp = summaryEntry.timestamp || new Date().toISOString();
+            //             } else if (typeof summaryEntry === 'string') {
+            //                 summary = summaryEntry;
+            //                 fullContent = summaryEntry;
+            //                 timestamp = new Date().toISOString();
+            //             } else {
+            //                 console.warn('Unknown summary entry format:', summaryEntry);
+            //                 return; // Skip this entry
+            //             }
+
+            //             const summaryMessage: AgentMessage = {
+            //                 id: `all-summary-${index}`,
+            //                 investigation_id: this.investigationId,
+            //                 message_type: AgentMessageType.SYSTEM,
+            //                 content: summary,
+            //                 timestamp: timestamp,
+            //                 metadata: {
+            //                     sequence: index,
+            //                     is_investigation_summary: true, // This triggers the summary card UI
+            //                     ui_summary: summary,
+            //                     full_content: fullContent,
+            //                     display_mode: 'summary_only'
+            //                 }
+            //             };
+
+            //             summaryMessages.push(summaryMessage);
+            //         });
+            //     }
+
+            //     // Combine and sort all messages by timestamp
+            //     allMessages = [...regularMessages, ...summaryMessages];
+            //     console.log(`🔍 All tab - combined ${regularMessages.length} regular messages + ${summaryMessages.length} summary messages`);
+            // }
 
             // Filter messages based on showAllThoughts setting and active tab
             const filtered = allMessages.filter((msg: AgentMessage) => {
@@ -226,12 +246,16 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
             // Sort by backend timestamp primarily, sequence number as secondary
             // This ensures reliable ordering based on authoritative backend timestamps
             const sorted = filtered.sort((a: AgentMessage, b: AgentMessage) => {
-                // Special handling: investigation summary always first
-                if (a.metadata?.['is_investigation_summary'] && !b.metadata?.['is_investigation_summary']) {
-                    return -1;
-                }
-                if (!a.metadata?.['is_investigation_summary'] && b.metadata?.['is_investigation_summary']) {
-                    return 1;
+                // For 'all' tab, sort purely by timestamp to achieve proper interleaving
+                // For other tabs, keep investigation summary first as before
+                if (activeTab !== 'all') {
+                    // Special handling: investigation summary always first (for messages and summary tabs)
+                    if (a.metadata?.['is_investigation_summary'] && !b.metadata?.['is_investigation_summary']) {
+                        return -1;
+                    }
+                    if (!a.metadata?.['is_investigation_summary'] && b.metadata?.['is_investigation_summary']) {
+                        return 1;
+                    }
                 }
 
                 // Primary sort: backend timestamp (authoritative)
@@ -292,7 +316,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     private latestUiSummaryTimestamp: string | null = null;
 
     // Keep activeTab for template binding compatibility
-    get activeTab(): 'messages' | 'summary' | 'all' {
+    get activeTab(): 'messages' | 'summary' {
         return this.activeTabSubject.value;
     }
 
@@ -960,20 +984,18 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     }
 
     // Tab management methods
-    isTabActive(tab: 'messages' | 'summary' | 'all'): boolean {
+    isTabActive(tab: 'messages' | 'summary'): boolean {
         return this.activeTab === tab;
     }
 
-    setActiveTab(tab: 'messages' | 'summary' | 'all'): void {
+    setActiveTab(tab: 'messages' | 'summary'): void {
         this.activeTabSubject.next(tab);
     }
 
-    getTabMessageCount(tab: 'messages' | 'summary' | 'all'): number {
+    getTabMessageCount(tab: 'messages' | 'summary'): number {
         const messages = this.chatMessagesSubject.value;
 
         switch (tab) {
-            case 'all':
-                return messages.length;
             case 'summary':
                 return messages.filter(msg => msg.metadata?.['is_investigation_summary']).length;
             case 'messages':

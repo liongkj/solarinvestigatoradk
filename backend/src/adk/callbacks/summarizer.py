@@ -312,6 +312,6 @@ def summarize_agent_output_callback(callback_context: CallbackContext) -> None:
         if not isinstance(callback_context.state.get("ui_summary"), list):
             callback_context.state["ui_summary"] = []
         history = callback_context.state["ui_summary"]
-        history.append(summary.model_dump_json())
+        history.append({**summary.model_dump_json(), "timestamp": datetime.now().isoformat()})
         callback_context.state["ui_summary"] = history
         # save the summary in the state
