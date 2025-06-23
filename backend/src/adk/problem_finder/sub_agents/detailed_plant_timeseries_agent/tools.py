@@ -162,7 +162,6 @@ async def filter_plant_timeseries_data(
 
     # CRITICAL FIX: Convert DataFrames to serializable format
     # Convert to dictionary/JSON format to avoid serialization error
-    print(filtered_df)
     tool_context.state["filtered_plant_timeseries_df"] = filtered_df.to_json(
         orient="records"
     )

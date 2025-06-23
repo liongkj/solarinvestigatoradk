@@ -2,7 +2,7 @@ from google.adk.agents import Agent
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 from dotenv import load_dotenv
-
+from adk.callbacks import summarize_agent_output_callback
 from .prompt import return_aggregator_prompt
 
 import os
@@ -15,5 +15,6 @@ aggregator_agent = Agent(
         temperature=0.2
     ),
     instruction=return_aggregator_prompt(),
-    output_key="final_comprehensive_report"
+    output_key="final_comprehensive_report",
+    after_agent_callback=summarize_agent_output_callback,
 )

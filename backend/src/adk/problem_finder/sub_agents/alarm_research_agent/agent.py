@@ -4,6 +4,8 @@ from google.genai import types
 from google.adk.tools.tool_context import ToolContext
 from google.adk.agents.callback_context import CallbackContext
 import vertexai
+from google.adk.agents import Agent
+from adk.callbacks import summarize_agent_output_callback
 
 import os
 from dotenv import load_dotenv
@@ -175,17 +177,7 @@ def rag_query_corpus(query: str, tool_context: ToolContext) -> dict:
 def state_setup(callback_context: CallbackContext):
     if "alarm_report" not in callback_context.state:
         callback_context.state["alarm_report"] = None
-    
 
-# test with gemini model
-# rag_model = GenerativeModel(
-#     model_name="gemini-2.0-flash", tools=[rag_retrieval_tool]
-# )
-# response = rag_model.generate_content("What is RAG and why it is helpful?")
-# print(response.text)
-
-# testing with real agent
-from google.adk.agents import Agent
 
 alarm_research_agent = Agent(
     name="alarm_research_agent",
@@ -206,5 +198,7 @@ alarm_research_agent = Agent(
            ],
     instruction=rag_prompt_v7(),
     output_key="alarm_agent_output",
-    before_agent_callback=state_setup
+    before_agent_callback=state_setup,
+    after_agent_callback=summarize_agent_output_callback,
+
 )
