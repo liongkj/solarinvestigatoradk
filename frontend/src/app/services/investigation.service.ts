@@ -34,7 +34,7 @@ export interface SSEEvent {
     has_state_delta?: boolean;
     has_artifact_delta?: boolean;
     message?: any;
-    ui_summary?: string;
+    ui_summary?: string; // Keep as string for SSE events (individual summaries)
     status?: string;
     result?: string;
     error?: string;

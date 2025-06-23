@@ -308,6 +308,10 @@ def summarize_agent_output_callback(callback_context: CallbackContext) -> None:
 
         summary = _run_summarizer_agent(agent_name, agent_output)
 
-        callback_context.state[f"ui_summary"] = summary.model_dump_json()
-
+        # Ensure ui_summary is a list before appending
+        if not isinstance(callback_context.state.get("ui_summary"), list):
+            callback_context.state["ui_summary"] = []
+        history = callback_context.state["ui_summary"]
+        history.append(summary.model_dump_json())
+        callback_context.state["ui_summary"] = history
         # save the summary in the state

@@ -461,24 +461,7 @@
                                                                 </div>
                                                             </div>
 
-                                                            <!-- Toggle to show full content -->
-                                                            <button class="btn btn-sm btn-outline-secondary"
-                                                                (click)="message.show_full_content = !message.show_full_content">
-                                                                <i class="fas"
-                                                                    [class.fa-expand]="!message.show_full_content"
-                                                                    [class.fa-compress]="message.show_full_content"></i>
-                                                                {{ message.show_full_content ? 'Show Summary' : 'Show
-                                                                Full Response' }}
-                                                            </button>
 
-                                                            <!-- Full content when expanded -->
-                                                            <div *ngIf="message.show_full_content"
-                                                                class="full-content mt-3 p-2 bg-white rounded border">
-                                                                <div
-                                                                    style="white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">
-                                                                    {{ message.content }}
-                                                                </div>
-                                                            </div>
                                                         </div>
                                                     </ng-container>
                                                 </ng-container>

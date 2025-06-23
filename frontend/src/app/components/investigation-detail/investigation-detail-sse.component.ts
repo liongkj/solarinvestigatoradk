@@ -103,23 +103,102 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
         map(([messages, showAllThoughts, activeTab]: [AgentMessage[], boolean, 'messages' | 'summary' | 'all']) => {
             console.log('Computing visibleMessages, total messages:', messages.length, 'showAllThoughts:', showAllThoughts, 'activeTab:', activeTab);
 
+            // For summary tab, create AgentMessage objects from investigation.ui_summary array
+            if (activeTab === 'summary') {
+                const summaryMessages: AgentMessage[] = [];
+
+                if (this.investigation?.ui_summary && Array.isArray(this.investigation.ui_summary)) {
+                    this.investigation.ui_summary.forEach((summaryEntry, index) => {
+                        // Handle both parsed objects and raw strings
+                        let summary, fullContent, timestamp;
+
+                        if (typeof summaryEntry === 'object' && summaryEntry !== null) {
+                            summary = summaryEntry.summary || JSON.stringify(summaryEntry);
+                            fullContent = summaryEntry.full_content || summaryEntry.summary;
+                            timestamp = summaryEntry.timestamp || new Date().toISOString();
+                        } else if (typeof summaryEntry === 'string') {
+                            summary = summaryEntry;
+                            fullContent = summaryEntry;
+                            timestamp = new Date().toISOString();
+                        } else {
+                            console.warn('Unknown summary entry format:', summaryEntry);
+                            return; // Skip this entry
+                        }
+
+                        const summaryMessage: AgentMessage = {
+                            id: `summary-${index}`,
+                            investigation_id: this.investigationId,
+                            message_type: AgentMessageType.SYSTEM,
+                            content: summary,
+                            timestamp: timestamp,
+                            metadata: {
+                                sequence: index,
+                                is_investigation_summary: true, // This triggers the special Investigation Summary UI
+                                ui_summary: summary, // Store as string for the parseUiSummary method
+                                full_content: fullContent,
+                                display_mode: 'summary_only'
+                            }
+                        };
+
+                        summaryMessages.push(summaryMessage);
+                    });
+                }
+
+                console.log(`🔍 Summary tab - created ${summaryMessages.length} summary messages from investigation.ui_summary`);
+                return summaryMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            }
+
             // Add investigation summary message if available and we're in the right tab
             let allMessages = [...messages];
 
-            // Add investigation summary as first message if available
-            if (activeTab === 'all' || activeTab === 'summary') {
+            // Debug: Log all current messages
+            console.log('🔍 All messages before filtering:', allMessages.map(m => ({
+                id: m.id,
+                type: m.message_type,
+                hasUiSummary: !!m.metadata?.['ui_summary'],
+                isInvestigationSummary: !!m.metadata?.['is_investigation_summary']
+            })));
+
+            // Add investigation summary as first message if available (only for 'all' tab now)
+            if (activeTab === 'all') {
                 const summaryMessage = this.createInvestigationSummaryMessage();
                 if (summaryMessage) {
                     allMessages = [summaryMessage, ...allMessages];
                 }
             }
 
+            // For 'all' tab, we need to duplicate messages: one for full content, one for summary
+            if (activeTab === 'all') {
+                const expandedMessages: AgentMessage[] = [];
+                allMessages.forEach(msg => {
+                    // Add the full message first
+                    expandedMessages.push({
+                        ...msg,
+                        metadata: {
+                            ...msg.metadata,
+                            display_mode: 'full_content'
+                        }
+                    });
+
+                    // If it has a structured summary, add the summary version
+                    if (msg.message_type === 'agent' && msg.metadata?.['ui_summary'] && !msg.metadata?.['is_investigation_summary']) {
+                        expandedMessages.push({
+                            ...msg,
+                            id: `${msg.id}-summary`,
+                            metadata: {
+                                ...msg.metadata,
+                                display_mode: 'summary_only',
+                                sequence: (msg.metadata?.['sequence'] || 0) + 0.5 // Place summary right after the full message
+                            }
+                        });
+                    }
+                });
+                allMessages = expandedMessages;
+            }
+
             // Filter messages based on showAllThoughts setting and active tab
             const filtered = allMessages.filter((msg: AgentMessage) => {
-                // Tab filtering
-                if (activeTab === 'summary' && !msg.metadata?.['is_investigation_summary']) {
-                    return false;
-                }
+                // Tab filtering (summary tab handled above with early return)
                 if (activeTab === 'messages' && msg.metadata?.['is_investigation_summary']) {
                     return false;
                 }
@@ -129,6 +208,19 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                     return true;
                 }
                 return msg.message_type !== AgentMessageType.THINKING;
+            }).map(msg => {
+                // Modify display behavior based on active tab (summary tab handled above with early return)
+                if (activeTab === 'messages') {
+                    // Force full content display for messages tab
+                    return {
+                        ...msg,
+                        metadata: {
+                            ...msg.metadata,
+                            display_mode: 'full_content'
+                        }
+                    };
+                }
+                return msg;
             });
 
             // Sort by backend timestamp primarily, sequence number as secondary
@@ -195,6 +287,9 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     // UI Summary support
     showUiSummaries = false;
     uiSummaryCache: Map<string, string> = new Map();
+    // Cache for storing latest UI summary to attach to the next agent message
+    private latestUiSummary: string | null = null;
+    private latestUiSummaryTimestamp: string | null = null;
 
     // Keep activeTab for template binding compatibility
     get activeTab(): 'messages' | 'summary' | 'all' {
@@ -562,13 +657,30 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
                 case 'ui_update':
                     if (event.ui_summary) {
-                        // Cache UI summary for display (for messages)
+                        // Cache UI summary for display (for messages) - keep as string since it's per-message
                         this.uiSummaryCache.set(event.investigation_id, event.ui_summary);
+
+                        // Store the latest UI summary to attach to the next agent message
+                        this.latestUiSummary = event.ui_summary;
+                        this.latestUiSummaryTimestamp = event.timestamp;
+
+                        console.log('🔄 Stored latest UI summary for next agent message:', event.ui_summary);
 
                         // Update investigation summary if this is an investigation-level summary
                         if (this.investigation && event.investigation_id === this.investigationId) {
                             console.log('🔄 Updating investigation UI summary via SSE:', event.ui_summary);
-                            this.investigation.ui_summary = event.ui_summary;
+
+                            // Initialize ui_summary as array if it doesn't exist
+                            if (!this.investigation.ui_summary) {
+                                this.investigation.ui_summary = [];
+                            }
+
+                            // Append new summary to the list (event.ui_summary is a string from SSE)
+                            this.investigation.ui_summary.push({
+                                summary: event.ui_summary, // This is a string
+                                full_content: event.full_content || event.ui_summary,
+                                timestamp: new Date().toISOString()
+                            });
 
                             // Trigger recomputation of visible messages to include updated summary
                             this.chatMessagesSubject.next(this.chatMessagesSubject.value);
@@ -698,9 +810,18 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
                             content: event.content,
                             timestamp: event.timestamp, // Use backend timestamp directly - no fallback to current time
                             metadata: {
-                                sequence: ++this.messageSequenceCounter // Assign sequence number for reliable ordering
+                                sequence: ++this.messageSequenceCounter, // Assign sequence number for reliable ordering
+                                // Attach the latest UI summary if available
+                                ui_summary: this.latestUiSummary || undefined
                             }
                         };
+
+                        // Clear the latest UI summary after attaching it
+                        if (this.latestUiSummary) {
+                            console.log('✅ Attached UI summary to agent message:', this.latestUiSummary);
+                            this.latestUiSummary = null;
+                            this.latestUiSummaryTimestamp = null;
+                        }
 
                         const currentMessages = this.chatMessagesSubject.value;
                         this.chatMessagesSubject.next([...currentMessages, completedMessage]);
@@ -942,7 +1063,7 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     // Investigation summary helpers
     hasInvestigationSummary(): boolean {
-        return !!(this.investigation?.ui_summary);
+        return !!(this.investigation?.ui_summary && this.investigation.ui_summary.length > 0);
     }
 
     shouldShowInvestigationSummaryPlaceholder(): boolean {
@@ -952,7 +1073,11 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
     }
 
     getInvestigationSummary(): string | null {
-        return this.investigation?.ui_summary || null;
+        // Return the latest summary from the list
+        if (this.investigation?.ui_summary && this.investigation.ui_summary.length > 0) {
+            return this.investigation.ui_summary[this.investigation.ui_summary.length - 1].summary;
+        }
+        return null;
     }
 
     // Get parsed investigation summary
@@ -1018,20 +1143,27 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     // Create investigation summary message for chat history
     createInvestigationSummaryMessage(): AgentMessage | null {
-        if (!this.investigation?.ui_summary) return null;
+        if (!this.investigation?.ui_summary || this.investigation.ui_summary.length === 0) return null;
+
+        // Use the latest summary for the investigation message
+        const latestSummary = this.investigation.ui_summary[this.investigation.ui_summary.length - 1];
 
         return {
             id: `investigation-summary-${this.investigation.id}`,
             investigation_id: this.investigationId,
             message_type: AgentMessageType.SYSTEM,
-            content: this.investigation.ui_summary,
+            content: latestSummary.summary,
             timestamp: this.investigation.updated_at,
             metadata: {
                 sequence: -1, // Special sequence to ensure it appears first
                 is_investigation_summary: true,
                 summary_type: 'investigation_overview'
             },
-            ui_summary: this.investigation.ui_summary,
+            ui_summary: [{
+                summary: latestSummary.summary,
+                full_content: latestSummary.full_content,
+                timestamp: latestSummary.timestamp
+            }],
             ui_state: { is_summary: true },
             show_full_content: false
         };
@@ -1145,6 +1277,17 @@ export class InvestigationDetailComponent implements OnInit, OnDestroy {
 
     // Check if agent message has structured summary
     hasStructuredMessageSummary(message: AgentMessage): boolean {
+        // Don't show structured summary if we're in full content mode
+        if (message.metadata?.['display_mode'] === 'full_content') {
+            return false;
+        }
+
+        // Always show structured summary if we're in summary mode
+        if (message.metadata?.['display_mode'] === 'summary_only') {
+            return !!(message.metadata?.['ui_summary']);
+        }
+
+        // Default behavior for other cases
         return this.showUiSummaries &&
             message.message_type === 'agent' &&
             !!(message.metadata?.['ui_summary']) &&

@@ -1,5 +1,6 @@
 """Simplified Investigation service leveraging Google ADK best practices"""
 
+import json
 import logging
 import asyncio
 from datetime import datetime, date
@@ -8,7 +9,6 @@ from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from adk.problem_finder.agent import root_agent
-from adk.agents.ui_summarizer_agent import generate_ui_summary
 from google.adk.events import Event, EventActions
 from google.genai.types import Part, Content
 from datetime import timedelta
@@ -62,97 +62,105 @@ class SimplifiedInvestigationService:
         """Generate session ID for investigation"""
         return f"investigation_{investigation_id}"
 
-    def _create_ui_summary_callback(self, investigation_id: str):
-        """Create after_agent_callback for UI summary generation"""
+    # def _create_ui_summary_callback(self, investigation_id: str):
+    #     """Create after_agent_callback for UI summary generation"""
 
-        async def after_agent_callback(*args, **kwargs):
-            """Process agent output and generate UI summary - flexible signature"""
-            try:
-                # Handle different callback signatures that Google ADK might use
-                callback_context = None
-                agent_output = None
+    #     async def after_agent_callback(*args, **kwargs):
+    #         """Process agent output and generate UI summary - flexible signature"""
+    #         try:
+    #             # Handle different callback signatures that Google ADK might use
+    #             callback_context = None
+    #             agent_output = None
 
-                # Try to extract parameters from args
-                if len(args) >= 1:
-                    callback_context = args[0]
-                if len(args) >= 2:
-                    agent_output = args[1]
+    #             # Try to extract parameters from args
+    #             if len(args) >= 1:
+    #                 callback_context = args[0]
+    #             if len(args) >= 2:
+    #                 agent_output = args[1]
 
-                # Try kwargs
-                if not agent_output:
-                    agent_output = kwargs.get("agent_output") or kwargs.get("output")
-                if not callback_context:
-                    callback_context = kwargs.get("callback_context") or kwargs.get(
-                        "context"
-                    )
+    #             # Try kwargs
+    #             if not agent_output:
+    #                 agent_output = kwargs.get("agent_output") or kwargs.get("output")
+    #             if not callback_context:
+    #                 callback_context = kwargs.get("callback_context") or kwargs.get(
+    #                     "context"
+    #                 )
 
-                # If still no agent_output, try to extract from callback_context
-                if not agent_output and callback_context:
-                    agent_output = getattr(
-                        callback_context, "agent_output", None
-                    ) or getattr(callback_context, "output", None)
+    #             # If still no agent_output, try to extract from callback_context
+    #             if not agent_output and callback_context:
+    #                 agent_output = getattr(
+    #                     callback_context, "agent_output", None
+    #                 ) or getattr(callback_context, "output", None)
 
-                logger.debug(
-                    f"Callback called with args: {len(args)}, kwargs: {list(kwargs.keys())}"
-                )
+    #             logger.debug(
+    #                 f"Callback called with args: {len(args)}, kwargs: {list(kwargs.keys())}"
+    #             )
 
-                if (
-                    not agent_output
-                    or not hasattr(agent_output, "parts")
-                    or not agent_output.parts
-                ):
-                    logger.warning(
-                        f"No valid agent output available for UI summary generation in investigation {investigation_id}"
-                    )
-                    return None
+    #             if (
+    #                 not agent_output
+    #                 or not hasattr(agent_output, "parts")
+    #                 or not agent_output.parts
+    #             ):
+    #                 logger.warning(
+    #                     f"No valid agent output available for UI summary generation in investigation {investigation_id}"
+    #                 )
+    #                 return None
 
-                # Get the full agent response
-                full_content = agent_output.parts[0].text if agent_output.parts else ""
+    #             # Get the full agent response
+    #             full_content = agent_output.parts[0].text if agent_output.parts else ""
 
-                # Generate UI summary using the summarizer agent
-                try:
-                    ui_summary = await generate_ui_summary(full_content)
-                    logger.info(
-                        f"Generated UI summary for investigation {investigation_id}"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to generate UI summary: {e}, using fallback"
-                    )
-                    # Fallback to simple truncation
-                    ui_summary = (
-                        f"Summary: {full_content[:100]}..."
-                        if len(full_content) > 100
-                        else full_content
-                    )
+    #             # # Generate UI summary using the summarizer agent
+    #             # try:
+    #             #     ui_summary = await generate_ui_summary(full_content)
+    #             #     logger.info(
+    #             #         f"Generated UI summary for investigation {investigation_id}"
+    #             #     )
+    #             # except Exception as e:
+    #             #     logger.warning(
+    #             #         f"Failed to generate UI summary: {e}, using fallback"
+    #             #     )
+    #             #     # Fallback to simple truncation
+    #             #     ui_summary = (
+    #             #         f"Summary: {full_content[:100]}..."
+    #             #         if len(full_content) > 100
+    #             #         else full_content
+    #             #     )
 
-                # Store UI summary in session state using ADK best practices
-                if callback_context and hasattr(callback_context, "state"):
-                    callback_context.state["ui_summary"] = ui_summary
-                    callback_context.state["full_content"] = full_content
-                    callback_context.state["last_update"] = datetime.now().isoformat()
-                else:
-                    logger.warning(
-                        f"No callback_context.state available for investigation {investigation_id}"
-                    )
+    #             # # Store UI summary in session state using ADK best practices
+    #             # if callback_context and hasattr(callback_context, "state"):
+    #             #     # Initialize ui_summary as list if it doesn't exist
+    #             #     if "ui_summary" not in callback_context.state:
+    #             #         callback_context.state["ui_summary"] = []
+                    
+    #             #     # Append new summary to the list instead of overwriting
+    #             #     callback_context.state["ui_summary"].append({
+    #             #         "summary": ui_summary,
+    #             #         "full_content": full_content,
+    #             #         "timestamp": datetime.now().isoformat()
+    #             #     })
+    #             #     callback_context.state["last_update"] = datetime.now().isoformat()
+    #             # else:
+    #             #     logger.warning(
+    #             #         f"No callback_context.state available for investigation {investigation_id}"
+    #             #     )
 
-                # Broadcast to SSE clients (WebSocket removed)
-                await self._broadcast_ui_update(
-                    investigation_id, ui_summary, full_content
-                )
+    #             # Broadcast to SSE clients (WebSocket removed)
+    #             await self._broadcast_ui_update(
+    #                 investigation_id, ui_summary, full_content
+    #             )
 
-                logger.info(
-                    f"UI callback completed for investigation {investigation_id}"
-                )
+    #             logger.info(
+    #                 f"UI callback completed for investigation {investigation_id}"
+    #             )
 
-                # Return None to use original agent output
-                return None
+    #             # Return None to use original agent output
+    #             return None
 
-            except Exception as e:
-                logger.error(f"Error in after_agent_callback: {e}")
-                return None
+    #         except Exception as e:
+    #             logger.error(f"Error in after_agent_callback: {e}")
+    #             return None
 
-        return after_agent_callback
+    #     return after_agent_callback
 
     async def create_investigation(
         self, request: InvestigationRequest
@@ -205,7 +213,8 @@ class SimplifiedInvestigationService:
             "problematic_detailed_inverter_performance": [],
             "problematic_five_minutes_pr": [],
             "filtered_plant_timeseries_df": None,
-            "final_comprehensive_report": None
+            "final_comprehensive_report": None,
+            "ui_summary": []  # Initialize as list to store multiple summaries
         }
 
         # Create ADK session (this handles all storage automatically)
@@ -250,7 +259,7 @@ class SimplifiedInvestigationService:
                     else None
                 ),
                 # Add UI data from session state
-                ui_summary=state.get("ui_summary"),
+                ui_summary=self._parse_ui_summary_safely(state.get("ui_summary")),
                 result=state.get("result"),
                 error_message=state.get("error_message"),
                 plant_name=state.get("plant_name", "Unknown Plant"),
@@ -649,6 +658,9 @@ class SimplifiedInvestigationService:
             if not session:
                 return []
 
+            # Get UI summaries from session state
+            ui_summaries = session.state.get("ui_summary", [])
+            
             messages = []
             for event in session.events:
                 if (
@@ -662,19 +674,36 @@ class SimplifiedInvestigationService:
                         else AgentMessageType.AGENT
                     )
                     content = event.content.parts[0].text or ""
+                    event_timestamp = (
+                        datetime.fromtimestamp(event.timestamp)
+                        if event.timestamp
+                        else datetime.now()
+                    )
+
+                    # For agent messages, try to find matching UI summary
+                    ui_summary_for_message = None
+                    if message_type == AgentMessageType.AGENT and ui_summaries:
+                        # Find the UI summary that matches this message's timestamp (approximately)
+                        for summary_entry in ui_summaries:
+                            if isinstance(summary_entry, dict) and 'timestamp' in summary_entry:
+                                summary_timestamp = datetime.fromisoformat(summary_entry['timestamp'].replace('Z', '+00:00'))
+                                # Match if timestamps are within 10 seconds of each other
+                                time_diff = abs((event_timestamp - summary_timestamp).total_seconds())
+                                if time_diff <= 10:
+                                    ui_summary_for_message = summary_entry['summary']
+                                    break
 
                     message = AgentMessage(
                         id=event.id,
                         investigation_id=investigation_id,
                         message_type=message_type,
                         content=content,
-                        timestamp=(
-                            datetime.fromtimestamp(event.timestamp)
-                            if event.timestamp
-                            else datetime.now()
-                        ),
-                        metadata={"author": event.author},
-                        ui_summary=None,  # Can be populated later if needed
+                        timestamp=event_timestamp,
+                        metadata={
+                            "author": event.author,
+                            "ui_summary": ui_summary_for_message
+                        },
+                        ui_summary=None,  # Keep as None for now, summary is in metadata
                         ui_state=None,
                         show_full_content=False,
                     )
@@ -1238,6 +1267,38 @@ class SimplifiedInvestigationService:
                     "partial": True,
                 },
             )
+
+    def _parse_ui_summary_safely(self, ui_summary_data):
+        """Safely parse UI summary data from session state"""
+        if not ui_summary_data:
+            return []
+        
+        if not isinstance(ui_summary_data, list):
+            return []
+            
+        parsed_summaries = []
+        for item in ui_summary_data:
+            try:
+                if isinstance(item, str):
+                    # Try to parse as JSON
+                    parsed_item = json.loads(item)
+                    parsed_summaries.append(parsed_item)
+                elif isinstance(item, dict):
+                    # Already a parsed object
+                    parsed_summaries.append(item)
+                else:
+                    logger.warning(f"Unknown UI summary item type: {type(item)}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse UI summary JSON: {e}")
+                # If it's not valid JSON, treat it as a simple string summary
+                parsed_summaries.append({
+                    "summary": str(item),
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                logger.error(f"Unexpected error parsing UI summary: {e}")
+                
+        return parsed_summaries
 
 
 # Singleton instance
