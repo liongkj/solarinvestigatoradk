@@ -983,39 +983,7 @@ class SimplifiedInvestigationService:
         """Run investigation step - alias for continue_investigation"""
         return await self.continue_investigation(investigation_id, user_message)
 
-    async def add_thinking_message(
-        self, investigation_id: str, thinking_content: str, step_name: str = "Thinking"
-    ):
-        """Add thinking message - simplified implementation using session state"""
-        try:
-            session_id = self._get_session_id(investigation_id)
-            session = await self.session_service.get_session(
-                app_name=self.app_name,
-                user_id=self.default_user_id,
-                session_id=session_id,
-            )
-
-            if session:
-                # Store thinking message in session state for later retrieval
-                thinking_messages = session.state.get("thinking_messages", [])
-                thinking_messages.append(
-                    {
-                        "step_name": step_name,
-                        "content": thinking_content,
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                )
-
-                # ADK best practice: Update state directly, let ADK persist
-                session.state["thinking_messages"] = thinking_messages
-
-                logger.info(
-                    f"Added thinking message for investigation {investigation_id}: {step_name}"
-                )
-
-        except Exception as e:
-            logger.error(f"Error adding thinking message: {e}")
-
+    
     async def update_investigation_status(
         self,
         investigation_id: str,
@@ -1327,6 +1295,44 @@ class SimplifiedInvestigationService:
                 logger.error(f"Unexpected error parsing UI summary: {e}")
                 
         return parsed_summaries
+    
+    async def redirect_to_workorder_agent(
+        self, investigation_id: str, user_message: str
+    ) -> str:
+        """Redirect to workorder agent for handling workorder-related requests"""
+        try:
+            # Get investigation context
+            investigation = await self.get_investigation(investigation_id)
+            if not investigation:
+                return "Investigation not found."
+
+            workorder_agent =  Agent(
+                name="workorder_agent",
+                model="gemini-2.5-flash-preview-05-20",
+                instruction="""You are a specialized agent for creating workorders related to solar plant investigations.""",
+                description="Help users to create workorders based on investigation results",
+                output_key="workorder_agent_output",
+                # after_agent_callback=summarize_agent_output_callback,
+                generate_content_config=types.GenerateContentConfig(temperature=0.1),
+                # tools=[tools[5], tools[6], store_inverter_device_id_and_capacity_peak],
+            )
+
+            # Create a dedicated runner for workorder agent
+            wo_runner_key = f"{investigation_id}_workorder"
+            runner = self.active_runners.get(wo_runner_key)
+            # if not runner:
+            #     runner = create_agent_runner(workorder_agent)
+            #     self.active_runners[wo_runner_key] = runner
+
+            # Pass user message to the workorder agent
+            # response = await runner.invoke(user_message)
+            response = None
+            return "response"
+
+        except Exception as e:
+            logger.error(f"Error in redirect_to_workorder_agent: {e}")
+            return f"Sorry, I encountered an error while processing your workorder request: {str(e)}"
+
 
 
 # Singleton instance
